@@ -1,8 +1,8 @@
 diff --git a/src/EulerEarn.sol b/src/EulerEarn.sol
-index 947233f..7eb5211 100644
+index 7b3634c..75e5008 100644
 --- a/src/EulerEarn.sol
 +++ b/src/EulerEarn.sol
-@@ -107,6 +107,17 @@ contract EulerEarn is ReentrancyGuard, ERC4626, Ownable2Step, Multicall, EVCUtil
+@@ -106,6 +106,17 @@ contract EulerEarn is ReentrancyGuard, ERC4626, Ownable2Step, EVCUtil, IEulerEar
      /// @dev "Overrides" the ERC20's storage variable to be able to modify it.
      string private _symbol;
  
@@ -20,7 +20,7 @@ index 947233f..7eb5211 100644
      /* CONSTRUCTOR */
  
      /// @dev Initializes the contract.
-@@ -350,6 +361,9 @@ contract EulerEarn is ReentrancyGuard, ERC4626, Ownable2Step, Multicall, EVCUtil
+@@ -353,6 +364,9 @@ contract EulerEarn is ReentrancyGuard, ERC4626, Ownable2Step, EVCUtil, IEulerEar
              seen[prevIndex] = true;
  
              newWithdrawQueue[i] = id;
@@ -30,7 +30,7 @@ index 947233f..7eb5211 100644
          }
  
          for (uint256 i; i < currLength; ++i) {
-@@ -367,6 +381,10 @@ contract EulerEarn is ReentrancyGuard, ERC4626, Ownable2Step, Multicall, EVCUtil
+@@ -370,6 +384,10 @@ contract EulerEarn is ReentrancyGuard, ERC4626, Ownable2Step, EVCUtil, IEulerEar
                      }
                  }
  
@@ -41,9 +41,9 @@ index 947233f..7eb5211 100644
                  delete config[id];
              }
          }
-@@ -754,6 +772,9 @@ contract EulerEarn is ReentrancyGuard, ERC4626, Ownable2Step, Multicall, EVCUtil
+@@ -767,6 +785,9 @@ contract EulerEarn is ReentrancyGuard, ERC4626, Ownable2Step, EVCUtil, IEulerEar
+             IERC20(asset()).forceApproveMaxWithPermit2(address(id), permit2);
  
-         if (supplyCap > 0) {
              if (!marketConfig.enabled) {
 +                // HARNESS
 +                withdrawRank[address(id)] = withdrawQueue.length + 1;
@@ -51,12 +51,12 @@ index 947233f..7eb5211 100644
                  withdrawQueue.push(id);
  
                  if (withdrawQueue.length > ConstantsLib.MAX_QUEUE_LENGTH) revert ErrorsLib.MaxQueueLengthExceeded();
-@@ -811,6 +832,8 @@ contract EulerEarn is ReentrancyGuard, ERC4626, Ownable2Step, Multicall, EVCUtil
-     /// @dev Withdraws `assets` from the verified vaults.
+@@ -824,6 +845,8 @@ contract EulerEarn is ReentrancyGuard, ERC4626, Ownable2Step, EVCUtil, IEulerEar
+     /// @dev Withdraws `assets` from the strategy vaults.
      function _withdrawStrategy(uint256 assets) internal {
          for (uint256 i; i < withdrawQueue.length; ++i) {
 +            // HARNESS
 +            lastIndexWithdraw = i;
              IERC4626 id = withdrawQueue[i];
  
-             uint256 toWithdraw = UtilsLib.min(id.maxWithdraw(address(this)), assets);
+             uint256 toWithdraw =

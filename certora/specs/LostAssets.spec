@@ -130,13 +130,13 @@ rule sharePriceIncreases(method f, env e, calldataarg args)
     require assert_uint256(fee()) == 0;
 
     // We query them in a state in which the vault is sync.
-    uint256 lastTotalAssetsBefore = totalAssets(); //CHANGED temporarily
+    uint256 lastTotalAssetsBefore = lastTotalAssets();
     uint256 totalSupplyBefore = totalSupply();
     require totalSupplyBefore > 0;
 
     f(e, args);
 
-    uint256 totalAssetsAfter = totalAssets();
+    uint256 totalAssetsAfter = lastTotalAssets();
     uint256 totalSupplyAfter = totalSupply();
     require totalSupplyAfter > 0;
 

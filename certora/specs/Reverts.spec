@@ -152,6 +152,7 @@ rule submitCapRevertCondition(env e, address market, uint256 newSupplyCap) {
         pendingCapValidAt != 0 ||
         config.removableAt != 0 ||
         newSupplyCap == assert_uint256(config.cap) ||
+        (newSupplyCap == 2^184-1 && config.cap == 2^136-1 ) || //new revert condition due to their most recent fix.
         (newSupplyCap >= 2^136 && newSupplyCap != 2^184-1) || 
         msgSenderOnlyEVCAccountOwnerReverted ||
         reentrancyEntered ||

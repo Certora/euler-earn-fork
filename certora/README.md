@@ -55,6 +55,7 @@ Roles
 Reentrancy
 Immutability
 Balances
+LostAssets --> Range
 ```
 
 ## Running Rules

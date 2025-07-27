@@ -12,6 +12,7 @@ methods {
     function owner() external returns(address) envfree;
     function curator() external returns(address) envfree;
     function isAllocator(address target) external returns(bool) envfree;
+    function permit2Address() external returns address envfree;
 }
 
 function hasCuratorRole(address user) returns bool {
@@ -108,22 +109,42 @@ rule newSupplyQueueEnsuresPositiveCap(env e, address[] newSupplyQueue)
 
 //The following two rules are from TokenApproval.spec in Silo and caught bugs in Silo.
 
-// Verified
+// violated after fix.
 invariant noCapThenNoApproval(address market)
     config_(market).cap == 0 => ERC20Helper.allowance(asset(), currentContract, market) == 0
     {
+    preserved acceptCap(address id) with (env e) {
+        // not sure all of these assumptions are necessary but all are legitimate.
+        require market != permit2Address();
+        require msgSender(e) != currentContract; 
+        requireInvariant pendingCapIsUint136(id);
+        requireInvariant enabledHasPositiveRank(id);
+        requireInvariant supplyCapIsEnabled(id);
+        requireInvariant withdrawRankCorrect(id);
+        requireInvariant noBadPendingCap(id);
+        requireInvariant noCapThenNoApproval(id);
+        requireInvariant pendingCapIsUint136(market);
+        requireInvariant enabledHasPositiveRank(market);
+        requireInvariant supplyCapIsEnabled(market);
+        requireInvariant withdrawRankCorrect(market);
+        requireInvariant noBadPendingCap(market);
+        requireInvariant noCapThenNoApproval(market);
+    }
     preserved with (env e) {
+        require msgSender(e) != currentContract; 
         requireInvariant pendingCapIsUint136(market);
         requireInvariant noBadPendingCap(market);
+        requireInvariant supplyCapIsEnabled(market);
     }
     }
 
-// Verified
+// violated after fix.
 invariant notInWithdrawQThenNoApproval(address market)
     withdrawRank(market) == 0 => ERC20Helper.allowance(asset(), currentContract, market) == 0
     {
     preserved with (env e) {
-        require e.msg.sender != currentContract;
+        require market != permit2Address();
+        require msgSender(e) != currentContract; 
         requireInvariant pendingCapIsUint136(market);
         requireInvariant enabledHasPositiveRank(market);
         requireInvariant supplyCapIsEnabled(market);

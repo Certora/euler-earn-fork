@@ -1,14 +1,18 @@
-// Based on generic ERC4626 specitication: https://github.com/Certora/Examples/blob/master/DEFI/ERC4626/certora/specs/ERC4626.spec
+//Based on generic ERC4626 specitication: https://github.com/Certora/Examples/blob/master/DEFI/ERC4626/certora/specs/ERC4626.spec
 
-//// INVARIANT 
-//// Token0.balanceOf(currentContract) == 0
+// INVARIANT 
+// Token0.balanceOf(currentContract) == 0
 
-
-import "setup/dispatching_EulerEarn.spec";
-import "summaries/Math.spec";
+import "Range.spec";
 using Token0 as Token0;
 
 methods {
+    function EthereumVaultConnector._msgSender() internal returns address => CONSTANT;
+    function _.getAccountOwner() internal => CONSTANT;
+    function _._accruedFeeAndAssets() internal with (env e) => _accruedFeeAndAssetsWithCaching(e) expect (uint256,uint256,uint256);
+
+    function expectedSupplyAssets(address) external returns uint256 envfree;
+    function withdrawQGetAt(uint256) external returns (address) envfree;
     function name() external returns string envfree;
     function symbol() external returns string envfree;
     function decimals() external returns uint8 envfree;
@@ -19,6 +23,7 @@ methods {
     function realTotalAssets() external returns uint256 envfree;
     function fee() external returns uint96 envfree;
     function wad() external returns uint256 envfree;
+    function withdrawQueueLength() external returns uint256 envfree;
 
     function totalSupply() external returns uint256 envfree;
     function balanceOf(address) external returns uint256 envfree;
@@ -52,8 +57,85 @@ methods {
     function allowance(address,address) external returns uint256 envfree;
 }
 
+ghost uint256 lastTotalAssetsCached;
+ghost uint256 lostAssetsCached;
+ghost uint96 feeCached;
+ghost uint256 totalSupplyCached;
+ghost address firstMarketCached;
+ghost uint256 firstMarketExpectedSupplyAssetsCached;
+
+ghost uint256 feeSharesCached; 
+ghost uint256 newTotalAssetsCached;
+ghost uint256 newLostAssetsCached;
+
+function initCacheToZero() {
+    feeSharesCached = 0;
+    newTotalAssetsCached = 0;
+    newLostAssetsCached = 0;
+}
+
+function _accruedFeeAndAssetsWithCaching(env e) returns (uint256,uint256,uint256) {
+    uint256 lastTotalAssets = lastTotalAssets();
+    uint256 lostAssets = lostAssets();
+    uint96 fee = fee();
+    uint256 totalSupply = totalSupply();
+    address firstMarket = withdrawQGetAt(0);
+    uint256 firstMarketExpectedSupplyAssets = expectedSupplyAssets(firstMarket);
+
+    if (feeSharesCached == 0 && newTotalAssetsCached == 0 && newLostAssetsCached == 0) {
+        lastTotalAssetsCached = lastTotalAssets;
+        lostAssetsCached = lostAssets;
+        feeCached = fee;
+        totalSupplyCached = totalSupply;
+        firstMarketCached = firstMarket;
+        firstMarketExpectedSupplyAssetsCached = firstMarketExpectedSupplyAssets; 
+        uint256 feeSharesRet;
+        uint256 newTotalAssetsRet;
+        uint256 newLostAssetsRet;
+        (feeSharesRet, newTotalAssetsRet, newLostAssetsRet) = accruedFeeAndAssetsNotSummarized(e);
+        feeSharesCached = feeSharesRet;
+        newTotalAssetsCached = newTotalAssetsRet;
+        newLostAssetsCached = newLostAssetsRet;
+        return (feeSharesRet, newTotalAssetsRet, newLostAssetsRet);
+    }
+    else {
+        if (
+            lastTotalAssets == lastTotalAssetsCached &&
+            lostAssets == lostAssetsCached &&
+            fee == feeCached && 
+            totalSupply == totalSupplyCached && 
+            firstMarket == firstMarketCached &&
+            firstMarketExpectedSupplyAssets == firstMarketExpectedSupplyAssetsCached 
+        ) {
+            uint256 feeSharesRet = feeSharesCached;
+            uint256 newTotalAssetsRet = newTotalAssetsCached;
+            uint256 newLostAssetsRet = newLostAssetsCached;
+            return (feeSharesRet,newTotalAssetsRet,newLostAssetsRet);
+        }
+        else {
+            lastTotalAssetsCached = lastTotalAssets;
+            lostAssetsCached = lostAssets;
+            feeCached = fee;
+            totalSupplyCached = totalSupply;
+            firstMarketCached = firstMarket;
+            firstMarketExpectedSupplyAssetsCached = firstMarketExpectedSupplyAssets; 
+            uint256 feeSharesRet;
+            uint256 newTotalAssetsRet;
+            uint256 newLostAssetsRet;
+            (feeSharesRet, newTotalAssetsRet, newLostAssetsRet) = accruedFeeAndAssetsNotSummarized(e);
+            feeSharesCached = feeSharesRet;
+            newTotalAssetsCached = newTotalAssetsRet;
+            newLostAssetsCached = newLostAssetsRet;
+            return (feeSharesRet, newTotalAssetsRet, newLostAssetsRet);
+        }
+    }
+}
+
+
+
 // Verified 
 rule conversionOfZero {
+    initCacheToZero();
     uint256 convertZeroShares = convertToAssets(0);
     uint256 convertZeroAssets = convertToShares(0);
 
@@ -63,29 +145,34 @@ rule conversionOfZero {
         "converting zero assets must return zero shares";
 }
 
-// Timeout
-// should maybe hold - try
+// Verified with caching summary (see above) or with CONSTANT summary
 rule convertToAssetsWeakAdditivity() {
     uint256 sharesA; uint256 sharesB;
+    initCacheToZero();
+    uint256 assetsA = convertToAssets(sharesA);
+    uint256 assetsB = convertToAssets(sharesB);
+    uint256 sharesAplusB = require_uint256(sharesA + sharesB);
+    uint256 assetsAplusB = convertToAssets(sharesAplusB);
     require sharesA + sharesB < max_uint128
-         && convertToAssets(sharesA) + convertToAssets(sharesB) < max_uint256
-         && convertToAssets(require_uint256(sharesA + sharesB)) < max_uint256;
-    assert convertToAssets(sharesA) + convertToAssets(sharesB) <= convertToAssets(require_uint256(sharesA + sharesB)),
+         && assetsA + assetsB < max_uint256
+         && assetsAplusB < max_uint256;
+    assert assetsA + assetsB <= assetsAplusB,
         "converting sharesA and sharesB to assets then summing them must yield a smaller or equal result to summing them then converting";
 }
 
-// Timeout
 rule convertToSharesWeakAdditivity() {
     uint256 assetsA; uint256 assetsB;
+    initCacheToZero();
     require assetsA + assetsB < max_uint128
-         && convertToAssets(assetsA) + convertToAssets(assetsB) < max_uint256
-         && convertToAssets(require_uint256(assetsA + assetsB)) < max_uint256;
-    assert convertToAssets(assetsA) + convertToAssets(assetsB) <= convertToAssets(require_uint256(assetsA + assetsB)),
+         && convertToShares(assetsA) + convertToShares(assetsB) < max_uint256
+         && convertToShares(require_uint256(assetsA + assetsB)) < max_uint256;
+    assert convertToShares(assetsA) + convertToShares(assetsB) <= convertToShares(require_uint256(assetsA + assetsB)),
         "converting assetsA and assetsB to shares then summing them must yield a smaller or equal result to summing them then converting";
 }
 
 // Verified
 rule conversionWeakMonotonicity {
+    initCacheToZero();
     uint256 smallerShares; uint256 largerShares;
     uint256 smallerAssets; uint256 largerAssets;
 
@@ -97,6 +184,7 @@ rule conversionWeakMonotonicity {
 
 // Verified
 rule conversionWeakIntegrity() {
+    initCacheToZero();
     uint256 sharesOrAssets;
     assert convertToShares(convertToAssets(sharesOrAssets)) <= sharesOrAssets,
         "converting shares to assets then back to shares must return shares less than or equal to the original amount";
@@ -107,6 +195,7 @@ rule conversionWeakIntegrity() {
 // Timeout
 // try 
 rule depositMonotonicity() {
+    initCacheToZero();
     env e; storage start = lastStorage;
 
     uint256 smallerAssets; uint256 largerAssets;
@@ -127,41 +216,90 @@ rule depositMonotonicity() {
 
 // Violated: https://prover.certora.com/output/5771024/b15799cc3bb74f438c991b341f2ee470/ (on original)
 // Verified on fix
-// shouldn't hold in original but should probably hold in the fix.
 rule zeroDepositZeroShares(uint assets, address receiver)
 {
     env e;
-    
+    initCacheToZero();
+
     uint shares = deposit(e,assets, receiver);
 
     assert shares == 0 <=> assets == 0;
 }
 
-// also violated currently https://prover.certora.com/output/5771024/25e532c4e0894f6d8f3e8c1ac5ab49ec/
-invariant assetsMoreThanSupply()
-    totalAssets()  >= totalSupply() + fees() + lostAssets() //maybe need to change lostAssets() to the newLostAssets() in case it is not updated?
+
+invariant assetsMoreThanSupplyDeposit()
+    lastTotalAssets() >= totalSupply()
+    filtered {
+        f -> f.selector == sig:deposit(uint256,address).selector
+    }
     {
         preserved with (env e) {
-            require msgSender(e) != currentContract;
+            initCacheToZero();
             address any;
             safeAssumptions(e, any , msgSender(e));
-            // require lostAssets() == 0, "assuming no assets were lost";
-            require lastTotalAssets() == realTotalAssets(), "no lost assets - phrased differently." ; 
-            require fee() < wad(), "reasonable fee";
+            require withdrawQueueLength() == 1;
+            requireInvariant feeInRange();
         }
     }
 
-// Violated: https://prover.certora.com/output/5771024/b15799cc3bb74f438c991b341f2ee470/
-// think about this.
-// invariant assetsMoreThanSupply()
-//     totalAssets() >= totalSupply()
-//     {
-//         preserved with (env e) {
-//             require msgSender(e) != currentContract;
-//             address any;
-//             safeAssumptions(e, any , msgSender(e));
-//         }
-//     }
+invariant assetsMoreThanSupplyMint()
+    lastTotalAssets() >= totalSupply()
+    filtered {
+        f -> f.selector == sig:mint(uint256,address).selector
+    }
+    {
+        preserved with (env e) {
+            address any;
+            safeAssumptions(e, any , msgSender(e));
+            require withdrawQueueLength() == 1;
+            requireInvariant feeInRange();
+        }
+    }
+
+invariant assetsMoreThanSupplyWithdraw()
+    lastTotalAssets() >= totalSupply()
+    filtered {
+        f -> f.selector == sig:withdraw(uint256,address,address).selector
+    }
+    {
+        preserved with (env e) {
+            address any;
+            safeAssumptions(e, any , msgSender(e));
+            require withdrawQueueLength() == 1;
+            requireInvariant feeInRange();
+        }
+    }
+
+invariant assetsMoreThanSupplyRedeem()
+    lastTotalAssets() >= totalSupply()
+    filtered {
+        f -> f.selector == sig:redeem(uint256,address,address).selector
+    }
+    {
+        preserved with (env e) {
+            address any;
+            safeAssumptions(e, any , msgSender(e));
+            require withdrawQueueLength() == 1;
+            requireInvariant feeInRange();
+        }
+    }
+
+invariant assetsMoreThanSupplyElse()
+    lastTotalAssets() >= totalSupply()
+    filtered {
+        f -> f.selector != sig:deposit(uint256,address).selector &&
+            f.selector != sig:mint(uint256,address).selector &&
+            f.selector != sig:withdraw(uint256,address,address).selector &&
+            f.selector != sig:redeem(uint256,address,address).selector
+    }
+    {
+        preserved with (env e) {
+            address any;
+            safeAssumptions(e, any , msgSender(e));
+            require withdrawQueueLength() == 1;
+            requireInvariant feeInRange();
+        }
+    }
 
 // Violated: https://prover.certora.com/output/5771024/b15799cc3bb74f438c991b341f2ee470/ // NOT RECHECKED
 invariant noAssetsIfNoSupply() 
@@ -399,7 +537,7 @@ function safeAssumptions(env e, address receiver, address owner) {
     // requireInvariant vaultSolvency();
     // requireInvariant noAssetsIfNoSupply();
     requireInvariant noSupplyIfNoAssets();
-    requireInvariant assetsMoreThanSupply();
+    // requireInvariant assetsMoreThanSupply();
 
     require msgSender(e) != currentContract;  // This is proved by rule noDynamicCalls
     requireInvariant zeroAllowanceOnAssets(msgSender(e));

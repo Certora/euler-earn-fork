@@ -1,21 +1,21 @@
 diff --git a/src/EulerEarn.sol b/src/EulerEarn.sol
-index 7b3634c..1413cda 100644
+index 7b3634c..bac41ca 100644
 --- a/src/EulerEarn.sol
 +++ b/src/EulerEarn.sol
 @@ -106,6 +106,17 @@ contract EulerEarn is ReentrancyGuard, ERC4626, Ownable2Step, EVCUtil, IEulerEar
      /// @dev "Overrides" the ERC20's storage variable to be able to modify it.
      string private _symbol;
  
-+    // HARNESS
++    // ghost variables
 +    // The index of the identifier of the last market withdrawn.
 +    uint256 public lastIndexWithdraw;
-+    // HARNESS
-+    // The rank of a market identifier in the withdraw queue.
-+    // Returns 0 if the corresponding market is not in the withdraw queue.
++    // The rank of a market identifier in the withdraw queue, returns 0 if the corresponding market is not in the withdraw queue.
 +    mapping(address => uint256) public withdrawRank;
-+    // HARNESS
 +    // The last index at which a market identifier has been removed from the withdraw queue.
 +    mapping(address => uint256) public deletedAt;
++
++    // hooks for cvl assertions
++    function HOOK_after_accrueInterest() internal {}
 +
      /* CONSTRUCTOR */
  
@@ -41,15 +41,25 @@ index 7b3634c..1413cda 100644
                  delete config[id];
              }
          }
-@@ -563,6 +581,7 @@ contract EulerEarn is ReentrancyGuard, ERC4626, Ownable2Step, EVCUtil, IEulerEar
-         _deposit(_msgSender(), receiver, assets, shares);
-     }
- 
-+    function HOOK_after_accrueInterest() internal {}
+@@ -546,6 +564,7 @@ contract EulerEarn is ReentrancyGuard, ERC4626, Ownable2Step, EVCUtil, IEulerEar
      /// @inheritdoc IERC4626
-     function withdraw(uint256 assets, address receiver, address owner)
-         public
-@@ -571,6 +590,7 @@ contract EulerEarn is ReentrancyGuard, ERC4626, Ownable2Step, EVCUtil, IEulerEar
+     function deposit(uint256 assets, address receiver) public override nonReentrant returns (uint256 shares) {
+         _accrueInterest();
++        HOOK_after_accrueInterest();
+ 
+         shares = _convertToSharesWithTotals(assets, totalSupply(), lastTotalAssets, Math.Rounding.Floor);
+ 
+@@ -557,7 +576,8 @@ contract EulerEarn is ReentrancyGuard, ERC4626, Ownable2Step, EVCUtil, IEulerEar
+     /// @inheritdoc IERC4626
+     function mint(uint256 shares, address receiver) public override nonReentrant returns (uint256 assets) {
+         _accrueInterest();
+-
++        HOOK_after_accrueInterest();
++
+         assets = _convertToAssetsWithTotals(shares, totalSupply(), lastTotalAssets, Math.Rounding.Ceil);
+ 
+         _deposit(_msgSender(), receiver, assets, shares);
+@@ -571,6 +591,7 @@ contract EulerEarn is ReentrancyGuard, ERC4626, Ownable2Step, EVCUtil, IEulerEar
          returns (uint256 shares)
      {
          _accrueInterest();
@@ -57,7 +67,15 @@ index 7b3634c..1413cda 100644
  
          // Do not call expensive `maxWithdraw` and optimistically withdraw assets.
  
-@@ -767,6 +787,9 @@ contract EulerEarn is ReentrancyGuard, ERC4626, Ownable2Step, EVCUtil, IEulerEar
+@@ -587,6 +608,7 @@ contract EulerEarn is ReentrancyGuard, ERC4626, Ownable2Step, EVCUtil, IEulerEar
+         returns (uint256 assets)
+     {
+         _accrueInterest();
++        HOOK_after_accrueInterest();
+ 
+         // Do not call expensive `maxRedeem` and optimistically redeem shares.
+ 
+@@ -767,6 +789,9 @@ contract EulerEarn is ReentrancyGuard, ERC4626, Ownable2Step, EVCUtil, IEulerEar
              IERC20(asset()).forceApproveMaxWithPermit2(address(id), permit2);
  
              if (!marketConfig.enabled) {
@@ -67,7 +85,7 @@ index 7b3634c..1413cda 100644
                  withdrawQueue.push(id);
  
                  if (withdrawQueue.length > ConstantsLib.MAX_QUEUE_LENGTH) revert ErrorsLib.MaxQueueLengthExceeded();
-@@ -824,6 +847,8 @@ contract EulerEarn is ReentrancyGuard, ERC4626, Ownable2Step, EVCUtil, IEulerEar
+@@ -824,6 +849,8 @@ contract EulerEarn is ReentrancyGuard, ERC4626, Ownable2Step, EVCUtil, IEulerEar
      /// @dev Withdraws `assets` from the strategy vaults.
      function _withdrawStrategy(uint256 assets) internal {
          for (uint256 i; i < withdrawQueue.length; ++i) {

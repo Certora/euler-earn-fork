@@ -10,7 +10,7 @@ methods {
     function _._msgSender() internal with (env e) => e.msg.sender expect address; //ignoring EVC compatibility
     // function _.getAccountOwner() internal => CONSTANT;
     // function _._accruedFeeAndAssets() internal with (env e) => _accruedFeeAndAssetsWithCaching(e) expect (uint256,uint256,uint256); // If this summary is used you need to call initCacheToZero at the start of every rule/invariant
-    function _._accruedFeeAndAssets() internal with (env e) => _accruedFeeAndAssetsSummary(e) expect (uint256,uint256,uint256);
+    // function _._accruedFeeAndAssets() internal with (env e) => _accruedFeeAndAssetsSummary(e) expect (uint256,uint256,uint256);
     function EulerEarn.HOOK_after_accrueInterest() internal => CVL_after_accrueInterest();  
 
     function expectedSupplyAssets(address) external returns uint256 envfree;
@@ -35,7 +35,6 @@ methods {
     function mint(uint256,address) external;
     function withdraw(uint256,address,address) external;
     function redeem(uint256,address,address) external;
-
     function totalAssets() external returns uint256 envfree;
     function convertToShares(uint256) external returns uint256 envfree;
     function convertToAssets(uint256) external returns uint256 envfree;
@@ -43,96 +42,20 @@ methods {
     function previewMint(uint256) external returns uint256 envfree;
     function previewWithdraw(uint256) external returns uint256 envfree;
     function previewRedeem(uint256) external returns uint256 envfree;
-
     function maxDeposit(address) external returns uint256 envfree;
     function maxMint(address) external returns uint256 envfree;
     function maxWithdraw(address) external returns uint256 envfree;
     function maxRedeem(address) external returns uint256 envfree;
-
     function permit(address,address,uint256,uint256,uint8,bytes32,bytes32) external;
     function DOMAIN_SEPARATOR() external returns bytes32;
-
     function Token0.balanceOf(address) external returns uint256 envfree;
     function Token0.allowance(address, address) external returns uint256 envfree;
     function Token0.transferFrom(address,address,uint256) external returns bool;
-
     function allowance(address,address) external returns uint256 envfree;
 }
 
-// summarization with caching -- doesn't approximate anything -- sometimes easier for the prover
-// ghost uint256 lastTotalAssetsCached;
-// ghost uint256 lostAssetsCached;
-// ghost uint96 feeCached;
-// ghost uint256 totalSupplyCached;
-// ghost address firstMarketCached;
-// ghost uint256 firstMarketExpectedSupplyAssetsCached;
-// ghost uint256 feeSharesCached; 
-// ghost uint256 newTotalAssetsCached;
-// ghost uint256 newLostAssetsCached;
-// function initCacheToZero() {
-//     feeSharesCached = 0;
-//     newTotalAssetsCached = 0;
-//     newLostAssetsCached = 0;
-// }
-// function _accruedFeeAndAssetsWithCaching(env e) returns (uint256,uint256,uint256) {
-//     uint256 lastTotalAssets = lastTotalAssets();
-//     uint256 lostAssets = lostAssets();
-//     uint96 fee = fee();
-//     uint256 totalSupply = totalSupply();
-//     address firstMarket = withdrawQGetAt(0);
-//     uint256 firstMarketExpectedSupplyAssets = expectedSupplyAssets(firstMarket);
-//     if (feeSharesCached == 0 && newTotalAssetsCached == 0 && newLostAssetsCached == 0) {
-//         lastTotalAssetsCached = lastTotalAssets;
-//         lostAssetsCached = lostAssets;
-//         feeCached = fee;
-//         totalSupplyCached = totalSupply;
-//         firstMarketCached = firstMarket;
-//         firstMarketExpectedSupplyAssetsCached = firstMarketExpectedSupplyAssets; 
-//         uint256 feeSharesRet;
-//         uint256 newTotalAssetsRet;
-//         uint256 newLostAssetsRet;
-//         (feeSharesRet, newTotalAssetsRet, newLostAssetsRet) = accruedFeeAndAssetsNotSummarized(e);
-//         feeSharesCached = feeSharesRet;
-//         newTotalAssetsCached = newTotalAssetsRet;
-//         newLostAssetsCached = newLostAssetsRet;
-//         return (feeSharesRet, newTotalAssetsRet, newLostAssetsRet);
-//     }
-//     else {
-//         if (
-//             lastTotalAssets == lastTotalAssetsCached &&
-//             lostAssets == lostAssetsCached &&
-//             fee == feeCached && 
-//             totalSupply == totalSupplyCached && 
-//             firstMarket == firstMarketCached &&
-//             firstMarketExpectedSupplyAssets == firstMarketExpectedSupplyAssetsCached 
-//         ) {
-//             uint256 feeSharesRet = feeSharesCached;
-//             uint256 newTotalAssetsRet = newTotalAssetsCached;
-//             uint256 newLostAssetsRet = newLostAssetsCached;
-//             return (feeSharesRet,newTotalAssetsRet,newLostAssetsRet);
-//         }
-//         else {
-//             lastTotalAssetsCached = lastTotalAssets;
-//             lostAssetsCached = lostAssets;
-//             feeCached = fee;
-//             totalSupplyCached = totalSupply;
-//             firstMarketCached = firstMarket;
-//             firstMarketExpectedSupplyAssetsCached = firstMarketExpectedSupplyAssets; 
-//             uint256 feeSharesRet;
-//             uint256 newTotalAssetsRet;
-//             uint256 newLostAssetsRet;
-//             (feeSharesRet, newTotalAssetsRet, newLostAssetsRet) = accruedFeeAndAssetsNotSummarized(e);
-//             feeSharesCached = feeSharesRet;
-//             newTotalAssetsCached = newTotalAssetsRet;
-//             newLostAssetsCached = newLostAssetsRet;
-//             return (feeSharesRet, newTotalAssetsRet, newLostAssetsRet);
-//         }
-//     }
-// }
-
 // allows us to make the summary below deterministic.
 ghost mapping(uint256  => uint256) feeAssetsFromTotalInterest;
-
 function _accruedFeeAndAssetsSummary(env e) returns (uint256,uint256,uint256) {
     uint256 lastTotalAssets = lastTotalAssets();
     uint256 lostAssets = lostAssets();
@@ -156,7 +79,6 @@ function _accruedFeeAndAssetsSummary(env e) returns (uint256,uint256,uint256) {
     return (feeShares, newTotalAssets, newLostAssets);
 }
 
-
 ghost mathint sumOfBalances {
     init_state axiom sumOfBalances == 0;
 }
@@ -173,8 +95,8 @@ hook Sload uint256 val _balances[KEY address addy]  {
 invariant totalSupplyIsSumOfBalances()
     totalSupply() == sumOfBalances;
 
-// Hooks, for multi_assert_checks
 
+// Hooks, for multi_assert_checks
 function CVL_after_accrueInterest() {
     assert totalAssets() >= totalSupply() + fees();
 }
@@ -238,8 +160,7 @@ rule conversionWeakIntegrity() {
         "converting assets to shares then back to assets must return assets less than or equal to the original amount";
 }
 
-// Timeout
-// try with appropriate assumptions
+// Verified
 rule depositMonotonicity() {
     env e; storage start = lastStorage;
 
@@ -259,7 +180,7 @@ rule depositMonotonicity() {
             "when supply tokens outnumber asset tokens, a larger deposit of assets must produce an equal or greater number of shares";
 }
 
-// Violated: https://prover.certora.com/output/5771024/b15799cc3bb74f438c991b341f2ee470/ (on original)
+// Violated on original
 // Verified on fix
 rule zeroDepositZeroShares(uint assets, address receiver){
     env e;
@@ -269,120 +190,23 @@ rule zeroDepositZeroShares(uint assets, address receiver){
     assert shares == 0 <=> assets == 0;
 }
 
-
-// rules on internal function - temporary
-rule propertiesAfterAccrue() {
-    require totalAssets() >= totalSupply() + fees();
-    env e;
-    _accrueInterest(e);
-    assert fees() == 0;
-    assert lastTotalAssets() == totalAssets();
-    assert totalAssets() >= totalSupply() + fees();
-}
-
-rule solvencyInInternalWithdraw() {
-    // simulating the internal _withdraw in a call from the external withdraw
-    env e;
-    address caller;
-    address receiver;
-    address owner;
-    uint256 assets;
-    uint256 shares;
-    safeAssumptions(e);
-
-    uint256 totalAssetsPre; 
-    uint256 feesPre;
-    uint256 lostAssetsPre;
-    uint256 totalSupplyPre = totalSupply();
-    (feesPre,totalAssetsPre,lostAssetsPre) =  _accruedFeeAndAssets(e);
-    
-    uint256 lastTotalAssetsPre = lastTotalAssets();
-    require totalAssetsPre >= totalSupplyPre + feesPre, "solvent before";
-    require lastTotalAssetsPre == totalAssetsPre, "_withdraw is called after _accrueInterest";
-
-    require shares == _convertToSharesWithTotals(e,assets, totalSupplyPre, lastTotalAssetsPre, Math.Rounding.Ceil);
-
-    _withdraw(e,caller,receiver,owner,assets,shares);
-
-    uint256 totalAssetsPost; 
-    uint256 feesPost;
-    uint256 lostAssetsPost;
-    uint256 totalSupplyPost = totalSupply();
-    (feesPost,totalAssetsPost,lostAssetsPost) =  _accruedFeeAndAssets(e);
-    
-    assert totalAssetsPost >= totalSupplyPost + feesPost, "solvent after";
-
-    // old ideas
-    // require assets >= shares; // this assumption is not good enough because we can have a situation where assets = 2 and shares = 0 and then withdraw makes it insolvent.
-    // require shares < totalSupply(); // I thought about adding this assumption but don't think it's valid -- maybe the counterexample comes from a bad summary to msgSender()
-}
-
-rule solvencyInInternalDeposit() {
-    // simulating the internal _deposit in a call from the external deposit
-    env e;
-    address caller;
-    address receiver;
-    uint256 assets;
-    uint256 shares;
-    safeAssumptions(e);
-
-    uint256 totalAssetsPre; 
-    uint256 feesPre;
-    uint256 lostAssetsPre;
-    uint256 totalSupplyPre = totalSupply();
-    (feesPre,totalAssetsPre,lostAssetsPre) =  _accruedFeeAndAssets(e);
-    
-    uint256 lastTotalAssetsPre = lastTotalAssets();
-    require totalAssetsPre >= totalSupplyPre + feesPre, "solvent before";
-    require lastTotalAssetsPre == totalAssetsPre, "_deposit is called after _accrueInterest";
-    
-    require shares == _convertToSharesWithTotals(e,assets, totalSupplyPre, lastTotalAssetsPre, Math.Rounding.Floor);
-
-    _deposit(e,caller,receiver,assets,shares);
-
-    uint256 totalAssetsPost; 
-    uint256 feesPost;
-    uint256 lostAssetsPost;
-    uint256 totalSupplyPost = totalSupply();
-    (feesPost,totalAssetsPost,lostAssetsPost) =  _accruedFeeAndAssets(e);
-    
-    assert totalAssetsPost >= totalSupplyPost + feesPost, "solvent after";
-}
-
-
-// verified for some cases -- but in depth dig above - should probably hold.
+// Main solvency invariant
 invariant TotalAssetsMoreThanSupplyAndFees()
     totalAssets() >= totalSupply() + fees()
     filtered {
         f -> f.selector == sig:withdraw(uint256,address,address).selector
-    }   
+    }
     {
         preserved updateWithdrawQueue(uint256[] indexes) with (env e) {
-            address any;
             safeAssumptions(e);
             require withdrawQueueLength() == 1;
-            requireInvariant feeInRange();
             require indexes.length != 0;
         }
         preserved with (env e) {
-            address any;
             safeAssumptions(e);
             require withdrawQueueLength() == 1;
-            requireInvariant feeInRange();
         }
     }
-
-// old version with lastTotalAssets()
-// invariant assetsMoreThanSupplyElse()
-//     lastTotalAssets() >= totalSupply()
-//     {
-//         preserved with (env e) {
-//             address any;
-//             safeAssumptions(e);
-//             require withdrawQueueLength() == 1;
-//             requireInvariant feeInRange();
-//         }
-//     }
 
 ////////////////////////////////////////////////////////////////////////////////
 ////                    #     State Transition                             /////
@@ -390,14 +214,15 @@ invariant TotalAssetsMoreThanSupplyAndFees()
 
 // Violated: https://prover.certora.com/output/5771024/1c8ee641eeaa47bf8f7ecf1d92e1f145/
 // should hold probably but 
-rule totalsMonotonicity() {
+rule totalsMonotonicity() 
+{
     method f; env e; calldataarg args;
     require msgSender(e) != currentContract; 
     uint256 totalSupplyBefore = totalSupply();
     uint256 totalAssetsBefore = lastTotalAssets();
-    address receiver;
+
     safeAssumptions(e);
-    callReceiverFunctions(f, e, receiver);
+    f(e, args);
 
     uint256 totalSupplyAfter = totalSupply();
     uint256 totalAssetsAfter = lastTotalAssets();
@@ -410,7 +235,8 @@ rule totalsMonotonicity() {
 }
 
 // Verified
-rule underlyingCannotChange() {
+rule underlyingCannotChange() 
+{
     address originalAsset = asset();
 
     method f; env e; calldataarg args;
@@ -428,6 +254,8 @@ rule underlyingCannotChange() {
 
 // Violated : https://prover.certora.com/output/5771024/1c8ee641eeaa47bf8f7ecf1d92e1f145/
 // should hold?
+
+// need to add assumptions to prevent overflow.
 rule dustFavorsTheHouse(uint assetsIn )
 {
     env e;
@@ -563,39 +391,8 @@ function safeAssumptions(env e) {
     requireInvariant totalSupplyIsSumOfBalances();
     require msgSender(e) != currentContract;  // This is proved by rule noDynamicCalls
     requireInvariant feeInRange();
-
-    // requireInvariant vaultSolvency();
-    // requireInvariant noAssetsIfNoSupply();
-    // requireInvariant noSupplyIfNoAssets();
-    // requireInvariant assetsMoreThanSupply();
-
-    // requireInvariant zeroAllowanceOnAssets(msgSender(e));
-
-    // require ( (receiver != owner => balanceOf(owner) + balanceOf(receiver) <= totalSupply())  && 
-    //             balanceOf(receiver) <= totalSupply() &&
-    //             balanceOf(owner) <= totalSupply());
+    requireInvariant TotalAssetsMoreThanSupplyAndFees();    
 }
-
-
-// A helper function to set the receiver 
-function callReceiverFunctions(method f, env e, address receiver) {
-    uint256 amount;
-    if (f.selector == sig:deposit(uint256,address).selector) {
-        deposit(e, amount, receiver);
-    } else if (f.selector == sig:mint(uint256,address).selector) {
-        mint(e, amount, receiver);
-    } else if (f.selector == sig:withdraw(uint256,address,address).selector) {
-        address owner;
-        withdraw(e, amount, receiver, owner);
-    } else if (f.selector == sig:redeem(uint256,address,address).selector) {
-        address owner;
-        redeem(e, amount, receiver, owner);
-    } else {
-        calldataarg args;
-        f(e, args);
-    }
-}
-
 
 function callContributionMethods(env e, method f, uint256 assets, uint256 shares, address receiver) {
     if (f.selector == sig:deposit(uint256,address).selector) {

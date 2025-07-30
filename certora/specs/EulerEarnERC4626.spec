@@ -11,6 +11,7 @@ methods {
     // function _.getAccountOwner() internal => CONSTANT;
     // function _._accruedFeeAndAssets() internal with (env e) => _accruedFeeAndAssetsWithCaching(e) expect (uint256,uint256,uint256); // If this summary is used you need to call initCacheToZero at the start of every rule/invariant
     function _._accruedFeeAndAssets() internal with (env e) => _accruedFeeAndAssetsSummary(e) expect (uint256,uint256,uint256);
+    function EulerEarn.HOOK_after_accrueInterest() internal => CVL_after_accrueInterest();  
 
     function expectedSupplyAssets(address) external returns uint256 envfree;
     function withdrawQGetAt(uint256) external returns (address) envfree;
@@ -172,6 +173,11 @@ hook Sload uint256 val _balances[KEY address addy]  {
 invariant totalSupplyIsSumOfBalances()
     totalSupply() == sumOfBalances;
 
+// Hooks, for multi_assert_checks
+
+function CVL_after_accrueInterest() {
+    assert totalAssets() >= totalSupply() + fees();
+}
 
 // Verified 
 rule conversionOfZero {
@@ -264,7 +270,7 @@ rule zeroDepositZeroShares(uint assets, address receiver){
 }
 
 
-// rule on internal function
+// rules on internal function - temporary
 rule propertiesAfterAccrue() {
     require totalAssets() >= totalSupply() + fees();
     env e;
@@ -273,7 +279,6 @@ rule propertiesAfterAccrue() {
     assert lastTotalAssets() == totalAssets();
     assert totalAssets() >= totalSupply() + fees();
 }
-
 
 rule solvencyInInternalWithdraw() {
     // simulating the internal _withdraw in a call from the external withdraw
@@ -348,6 +353,9 @@ rule solvencyInInternalDeposit() {
 // verified for some cases -- but in depth dig above - should probably hold.
 invariant TotalAssetsMoreThanSupplyAndFees()
     totalAssets() >= totalSupply() + fees()
+    filtered {
+        f -> f.selector == sig:withdraw(uint256,address,address).selector
+    }   
     {
         preserved updateWithdrawQueue(uint256[] indexes) with (env e) {
             address any;

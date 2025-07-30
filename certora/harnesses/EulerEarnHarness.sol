@@ -35,6 +35,11 @@ contract EulerEarnHarness is EulerEarn {
         return _accruedFeeAndAssets();
     }
 
+    // THIS FUNCTION SHOULD NOT BE CHECKED FOR INVARIANTS - IT CHANGES THE STATE
+    function accrueInterest() external {
+        _accrueInterest();
+    }
+
     function accruedFeeAndAssetsNotSummarized()
         external
         view

@@ -1,4 +1,6 @@
-import "./vaults_summaries_EulerEarn.spec";
+// import "./vaults_summaries_EulerEarn.spec";
+using VaultMock0 as v0;
+using VaultMock1 as v1;
 
 methods {
 function _.approve(address,uint256) external => DISPATCHER(true);
@@ -21,6 +23,7 @@ function _.asset() external with (env e) => cvlDispatchAsset(calledContract, e) 
 function _.maxDeposit(address owner) external with (env e) => cvlDispatchMaxDeposit(owner, calledContract, e) expect uint256;
 function _.deposit(uint256 assets, address receiver) external with (env e) 
             => cvlDispatchDeposit(assets, receiver, calledContract, e) expect uint256;
+function _.totalSupply() external with (env e) => cvlDispathTotalSupply(calledContract,e) expect uint256;
 
 function _.checkVaultStatus() external => NONDET;
 function _.checkAccountStatus(address, address[]) external => NONDET;
@@ -94,6 +97,17 @@ function cvlDispatchDeposit(uint256 assets, address receiver, address called, en
     }
     if(called == v1) {
         return v1.deposit(e, assets, receiver);
+    }
+    require false, "We assume external calls to ERC4626 methods are always on one of the vaults";
+    return 0;
+}
+
+function cvlDispathTotalSupply(address called, env e) returns uint256 {
+    if(called == v0) {
+        return v0.totalSupply(e);
+    }
+    if(called == v1) {
+        return v1.totalSupply(e);
     }
     require false, "We assume external calls to ERC4626 methods are always on one of the vaults";
     return 0;

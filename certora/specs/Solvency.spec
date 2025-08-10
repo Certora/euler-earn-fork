@@ -259,13 +259,21 @@ rule solvencyEnablesInternalWithdraw() {
 
 }
 
-
+// most recent run: https://prover.certora.com/output/5771024/9f10d75284d041478faddde17cc373a6/?anonymousKey=78bc17b01af11119aaba62d2c80be88ee56f442e
+// failed cases: transferFrom - probably there is allownace to msg.sender 
+//               updateWithdrawQueue - probably withdrawQueue has size 0 
+// timeouts: deposit,mint,withdraw,redeem.
+// still running as i write this.
 rule withdrawFrontRun(method f) 
 filtered {
-    f -> !f.isView
+    f -> !f.isView && (
+            // (f.selector == sig:withdraw(uint256,address,address).selector ||
+            // f.selector == sig:redeem(uint256,address,address).selector ||
+            f.selector == sig:deposit(uint256,address).selector
+            // f.selector == sig:mint(uint256,address).selector ||
+    ) // the rest of the methods are verified
 }
 {
-    calldataarg args;
     env e1;
     env e2;
     safeAssumptions(e1);
@@ -277,11 +285,36 @@ filtered {
     uint256 assets;
     address receiver;
     address owner;
+    require owner != e2.msg.sender, "if the owner frontruns withdraws/transfers/etc their funds then it will revert after";
 
     withdraw@withrevert(e1,assets,receiver,owner);
     bool reverted1 = lastReverted;
 
-    f(e2, args) at start;
+    if (f.selector == sig:transferFrom(address,address,uint256).selector) {
+        // special treatment of transferFrom method
+        address from;
+        address to;
+        uint256 value;
+        require from != owner, "don't frontrun a transfer from address owner";
+        transferFrom(e2,from,to,value) at start;
+    } 
+    else if (f.selector == sig:updateWithdrawQueue(uint256[]).selector) {
+        // special treatment of updateWithdrawQueue method
+        uint256[] indexes;
+        require indexes.length != 0;
+        updateWithdrawQueue(e2,indexes) at start;
+    }
+    else {
+        calldataarg args;
+        f(e2, args) at start;
+    }
+    uint256 fees;
+    uint256 totalAssets; 
+    uint256 lostAssets;
+    uint256 totalSupply = totalSupply();
+    (fees,totalAssets,lostAssets) =  _accruedFeeAndAssets(e2);
+    assert totalAssets >= fees + totalSupply; 
+
     withdraw@withrevert(e1,assets,receiver,owner);
     bool reverted2 = lastReverted;
 

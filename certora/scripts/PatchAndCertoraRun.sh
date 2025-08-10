@@ -16,7 +16,7 @@ fi
 git apply certora/scripts/EulerEarn.patch 
 
 # Run certoraRun with the provided conf file
-if ! certoraRun certora/confs/$CONF_FILE; then
+if ! certoraRun $CONF_FILE; then
   echo "certoraRun failed, continuing to Unmunge."
 fi
 

@@ -1,20 +1,27 @@
 //Based on generic ERC4626 specitication: https://github.com/Certora/Examples/blob/master/DEFI/ERC4626/certora/specs/ERC4626.spec
 
-// INVARIANT 
-// Token0.balanceOf(currentContract) == 0
-
 import "Range.spec";
 using Token0 as Token0;
+using ERC20Helper as ERC20Helper;
+using EthereumVaultConnector as EVC;
 
 methods {
     function _._msgSender() internal with (env e) => e.msg.sender expect address; //ignoring EVC compatibility
-    // function _.getAccountOwner() internal => CONSTANT;
-    // function _._accruedFeeAndAssets() internal with (env e) => _accruedFeeAndAssetsWithCaching(e) expect (uint256,uint256,uint256); // If this summary is used you need to call initCacheToZero at the start of every rule/invariant
     // function _._accruedFeeAndAssets() internal with (env e) => _accruedFeeAndAssetsSummary(e) expect (uint256,uint256,uint256);
-    function EulerEarn.HOOK_after_accrueInterest() internal => CVL_after_accrueInterest();  
+    // function EulerEarn.HOOK_after_accrueInterest() internal => CVL_after_accrueInterest();
 
+    // the summary we had with nonAssembly in EulerEarnHarness was bad    
+     function SafeERC20.safeTransfer(address token,address to,uint256 value) internal with (env e) 
+        => tokenTransferFromToCVL(e,token,calledContract,to,value); 
+    
+    // function _._decimalsOffset() internal => 18 expect uint8; // TRYING 18 as a default value for decimal offset of underlying vaults.
+    function EVC.getAccountOwner(address) external returns address envfree;
+    function config_(address) external returns EulerEarnHarness.MarketConfig envfree; 
+    function virtualAmount() external returns uint256 envfree;
+    function permit2Address() external returns address envfree;
+    function feeRecipient() external returns address envfree;
     function expectedSupplyAssets(address) external returns uint256 envfree;
-    function withdrawQGetAt(uint256) external returns (address) envfree;
+    function withdrawQGetAt(uint256) external returns address envfree;
     function name() external returns string envfree;
     function symbol() external returns string envfree;
     function decimals() external returns uint8 envfree;
@@ -26,9 +33,10 @@ methods {
     function fee() external returns uint96 envfree;
     function wad() external returns uint256 envfree;
     function withdrawQueueLength() external returns uint256 envfree;
-
+    function ERC20Helper.totalSupply(address) external returns uint256 envfree;
     function totalSupply() external returns uint256 envfree;
     function balanceOf(address) external returns uint256 envfree;
+    function reentrancyGuardEntered() external returns bool envfree;
 
     function approve(address,uint256) external returns bool;
     function deposit(uint256,address) external;
@@ -54,16 +62,52 @@ methods {
     function allowance(address,address) external returns uint256 envfree;
 }
 
+function tokenTransferFromToCVL(env e,address token,address from, address to, uint256 value) {
+    if (token == Token0) {
+        Token0._transfer(e,from, to, value);
+        return;
+    }
+    require false, "this should only be called on Token0";
+}
+
+// Any invariant proved anywhere can be added here.
+// For solvency TotalAssetsMoreThanSupplyAndFeesElse -- we are not done proving it, but using it to test.
+function safeAssumptions(env e) {
+    require currentContract != asset(); // Although this is not disallowed, we assume the contract's underlying asset is not the contract itself
+    requireInvariant totalSupplyIsSumOfBalances();
+    require msgSender(e) != currentContract;  // This is proved by rule noDynamicCalls
+    requireInvariant feeInRange();
+    requireInvariant configBalanceAndTotalSupply(withdrawQGetAt(0));   
+    requireInvariant noAssetsOnEuler();
+    
+    uint256 fees;
+    uint256 totalAssets; 
+    uint256 lostAssets;
+    uint256 totalSupply = totalSupply();
+    (fees,totalAssets,lostAssets) =  _accruedFeeAndAssets(e);
+    require totalAssets >= fees + totalSupply, "proven in TotalAssetsMoreThanSupplyAndFees - in different cases"; 
+    require totalAssets <= 2^128, "reasonable value for totalAssets";
+    require totalSupply <= 2^128, "reasonable value for totalSupply";
+    require lostAssets <= 2^128, "reasonable value for lostAssets";
+}
+
 // allows us to make the summary below deterministic.
 ghost mapping(uint256  => uint256) feeAssetsFromTotalInterest;
 function _accruedFeeAndAssetsSummary(env e) returns (uint256,uint256,uint256) {
     uint256 lastTotalAssets = lastTotalAssets();
     uint256 lostAssets = lostAssets();
-    address firstMarket = withdrawQGetAt(0);
-    uint256 firstMarketExpectedSupplyAssets = expectedSupplyAssets(firstMarket);
+    uint256 realTotalAssets;
     uint256 totalSupply = totalSupply();
+    
+    if (withdrawQueueLength() == 0) {
+        require realTotalAssets == 0;
+    }
+    else {
+        address firstMarket = withdrawQGetAt(0);
+        uint256 firstMarketExpectedSupplyAssets = expectedSupplyAssets(firstMarket);
+        require realTotalAssets == firstMarketExpectedSupplyAssets;
+    }
 
-    uint256 realTotalAssets = firstMarketExpectedSupplyAssets; 
     uint256 newLostAssets;
     if (realTotalAssets < lastTotalAssets - lostAssets) {
         newLostAssets = require_uint256(lastTotalAssets - realTotalAssets);
@@ -73,7 +117,7 @@ function _accruedFeeAndAssetsSummary(env e) returns (uint256,uint256,uint256) {
     uint256 newTotalAssets = require_uint256(realTotalAssets + newLostAssets);
     uint256 totalInterest = require_uint256(newTotalAssets - lastTotalAssets);
     uint256 feeAssets = feeAssetsFromTotalInterest[totalInterest];
-    require feeAssets < totalInterest; //instead of doing the mulDiv we just enforce this.
+    require feeAssets <= totalInterest; //instead of doing the mulDiv we just enforce this.
 
     uint256 feeShares = _convertToSharesWithTotals(e,feeAssets, totalSupply(), require_uint256(newTotalAssets - feeAssets), Math.Rounding.Floor);
     return (feeShares, newTotalAssets, newLostAssets);
@@ -96,10 +140,105 @@ invariant totalSupplyIsSumOfBalances()
     totalSupply() == sumOfBalances;
 
 
-// Hooks, for multi_assert_checks
+// Verified
+invariant noAssetsOnEuler()
+    Token0.balanceOf(currentContract) == 0
+    {   
+        preserved withdraw(uint256 assets, address receiver, address owner) with (env e) {
+            require receiver != currentContract;
+            require owner != currentContract;
+            safeAssumptions(e);
+        }
+        preserved redeem(uint256 assets, address receiver, address owner) with (env e) {
+            require receiver != currentContract;
+            require owner != currentContract;
+            safeAssumptions(e);
+        }
+        preserved with (env e) {
+            safeAssumptions(e);
+        }
+    }
+
+/// solvency properties.
+
 function CVL_after_accrueInterest() {
     assert totalAssets() >= totalSupply() + fees();
 }
+
+// Main solvency invariant -- broken up into the different cases for different operations:
+// first two cases - timeout 
+invariant TotalAssetsMoreThanSupplyAndFeesWithdraw()
+    totalAssets() >= totalSupply() + fees()
+    filtered {
+    f -> f.selector == sig:withdraw(uint256,address,address).selector
+    }
+    {
+        preserved with (env e) {
+            safeAssumptions(e);
+            require withdrawQueueLength() == 1;
+        }
+    }
+
+invariant TotalAssetsMoreThanSupplyAndFeesRedeem()
+    totalAssets() >= totalSupply() + fees()
+    filtered {
+    f -> f.selector == sig:redeem(uint256,address,address).selector
+    }
+    {
+        preserved with (env e) {
+            safeAssumptions(e);
+            require withdrawQueueLength() == 1;
+        }
+    }
+
+// Verified https://prover.certora.com/output/5771024/3515c79d5e9a44349f06b12c61ef5221/
+invariant TotalAssetsMoreThanSupplyAndFeesDeposit()
+    totalAssets() >= totalSupply() + fees()
+    filtered {
+    f -> f.selector == sig:deposit(uint256,address).selector
+    }
+    {
+        preserved with (env e) {
+            safeAssumptions(e);
+            require withdrawQueueLength() == 1;
+        }
+    }
+
+// Verified https://prover.certora.com/output/5771024/faf5c9e75afa4bb185bae3ed323c6612/
+invariant TotalAssetsMoreThanSupplyAndFeesMint()
+    totalAssets() >= totalSupply() + fees()
+    filtered {
+    f -> f.selector == sig:mint(uint256,address).selector
+    }
+    {
+        preserved with (env e) {
+            safeAssumptions(e);
+            require withdrawQueueLength() == 1;
+        }
+    }
+
+// Verified https://prover.certora.com/output/5771024/47f4a8b0537942c29fe91664da88a13e/
+invariant TotalAssetsMoreThanSupplyAndFeesElse()
+    totalAssets() >= totalSupply() + fees()
+    filtered {
+    f -> !(f.selector == sig:withdraw(uint256,address,address).selector
+      || f.selector == sig:redeem(uint256,address,address).selector
+      || f.selector == sig:deposit(uint256,address).selector
+      || f.selector == sig:mint(uint256,address).selector
+      )
+    }
+    {
+        preserved updateWithdrawQueue(uint256[] indexes) with (env e) {
+            safeAssumptions(e);
+            require withdrawQueueLength() == 1;
+            require indexes.length != 0;
+        }
+        preserved with (env e) {
+            safeAssumptions(e);
+            require withdrawQueueLength() == 1;
+        }
+    }
+
 
 // Verified 
 rule conversionOfZero {
@@ -161,6 +300,53 @@ rule conversionWeakIntegrity() {
 }
 
 // Verified
+rule underlyingCannotChange() 
+{
+    address originalAsset = asset();
+
+    method f; env e; calldataarg args;
+    f(e, args);
+
+    address newAsset = asset();
+
+    assert originalAsset == newAsset,
+        "the underlying asset of a contract must not change";
+}
+
+// Verified -- not standard ERC4626 but specific to us, this is simple because config_(market).balance should equal market.balanceOf(currentContract)
+invariant configBalanceAndTotalSupply(address market) 
+    config_(market).balance <= ERC20Helper.totalSupply(market) 
+    {
+        preserved with(env e) {
+            require msgSender(e) != currentContract;
+            safeAssumptions(e);
+        }
+    }
+
+// timeout
+rule totalsMonotonicity()
+{
+    method f; env e; calldataarg args;
+    require !f.isView;
+    require msgSender(e) != currentContract; 
+    uint256 totalSupplyBefore = require_uint256(totalSupply() + fees());
+    uint256 totalAssetsBefore = totalAssets();
+
+    safeAssumptions(e);
+    f(e, args);
+    require withdrawQueueLength() >= 1, "ignore cases where the withdraw queue is emptied";
+
+    uint256 totalSupplyAfter = require_uint256(totalSupply() + fees());
+    uint256 totalAssetsAfter = totalAssets();
+    
+    // possibly assert totalSupply and totalAssets must not change in opposite directions
+    assert totalSupplyBefore < totalSupplyAfter  <=> totalAssetsBefore < totalAssetsAfter,
+        "if totalSupply changes by a larger amount, the corresponding change in totalAssets must remain the same or grow";
+    assert totalSupplyAfter == totalSupplyBefore => totalAssetsBefore == totalAssetsAfter,
+        "equal size changes to totalSupply must yield equal size changes to totalAssets";
+}
+
+// timeout
 rule depositMonotonicity() {
     env e; storage start = lastStorage;
 
@@ -181,7 +367,7 @@ rule depositMonotonicity() {
 }
 
 // Violated on original
-// Verified on fix
+// Verified on fix https://prover.certora.com/output/5771024/75bb49eac8b34219bb9e177fcc25773a/
 rule zeroDepositZeroShares(uint assets, address receiver){
     env e;
 
@@ -190,72 +376,7 @@ rule zeroDepositZeroShares(uint assets, address receiver){
     assert shares == 0 <=> assets == 0;
 }
 
-// Main solvency invariant
-invariant TotalAssetsMoreThanSupplyAndFees()
-    totalAssets() >= totalSupply() + fees()
-    filtered {
-        f -> f.selector == sig:withdraw(uint256,address,address).selector
-    }
-    {
-        preserved updateWithdrawQueue(uint256[] indexes) with (env e) {
-            safeAssumptions(e);
-            require withdrawQueueLength() == 1;
-            require indexes.length != 0;
-        }
-        preserved with (env e) {
-            safeAssumptions(e);
-            require withdrawQueueLength() == 1;
-        }
-    }
-
-////////////////////////////////////////////////////////////////////////////////
-////                    #     State Transition                             /////
-////////////////////////////////////////////////////////////////////////////////
-
-// Violated: https://prover.certora.com/output/5771024/1c8ee641eeaa47bf8f7ecf1d92e1f145/
-// should hold probably but 
-rule totalsMonotonicity() 
-{
-    method f; env e; calldataarg args;
-    require msgSender(e) != currentContract; 
-    uint256 totalSupplyBefore = totalSupply();
-    uint256 totalAssetsBefore = lastTotalAssets();
-
-    safeAssumptions(e);
-    f(e, args);
-
-    uint256 totalSupplyAfter = totalSupply();
-    uint256 totalAssetsAfter = lastTotalAssets();
-    
-    // possibly assert totalSupply and totalAssets must not change in opposite directions
-    assert totalSupplyBefore < totalSupplyAfter  <=> totalAssetsBefore < totalAssetsAfter,
-        "if totalSupply changes by a larger amount, the corresponding change in totalAssets must remain the same or grow";
-    assert totalSupplyAfter == totalSupplyBefore => totalAssetsBefore == totalAssetsAfter,
-        "equal size changes to totalSupply must yield equal size changes to totalAssets";
-}
-
-// Verified
-rule underlyingCannotChange() 
-{
-    address originalAsset = asset();
-
-    method f; env e; calldataarg args;
-    f(e, args);
-
-    address newAsset = asset();
-
-    assert originalAsset == newAsset,
-        "the underlying asset of a contract must not change";
-}
-
-////////////////////////////////////////////////////////////////////////////////
-////                    #   High Level                                    /////
-////////////////////////////////////////////////////////////////////////////////
-
-// Violated : https://prover.certora.com/output/5771024/1c8ee641eeaa47bf8f7ecf1d92e1f145/
-// should hold?
-
-// need to add assumptions to prevent overflow.
+// timeout - because of call to both deposit and redeem (rules with just redeem timeout)
 rule dustFavorsTheHouse(uint assetsIn )
 {
     env e;
@@ -264,24 +385,22 @@ rule dustFavorsTheHouse(uint assetsIn )
     safeAssumptions(e);
     uint256 totalSupplyBefore = totalSupply();
 
-    uint balanceBefore = Token0.balanceOf(currentContract); //totalAssets() instead.
+    uint userBalanceOfBefore = Token0.balanceOf(msgSender(e));
 
     uint shares = deposit(e,assetsIn, msgSender(e));
     uint assetsOut = redeem(e,shares,msgSender(e),msgSender(e));
 
-    uint balanceAfter = Token0.balanceOf(currentContract);
+    uint userBalanceOfAfter = Token0.balanceOf(msgSender(e));
 
-    assert balanceAfter >= balanceBefore;
+    assert userBalanceOfAfter <= userBalanceOfBefore;
 }
 
-////////////////////////////////////////////////////////////////////////////////
-////                       #   Risk Analysis                           /////////
-////////////////////////////////////////////////////////////////////////////////
-
-// Violated: https://prover.certora.com/output/5771024/a4623f525b0c4bae9a77ea0693ecaa6c/
-// not critical - maybe doesnt hold. maybe lower than 2?
+// Verified https://prover.certora.com/output/5771024/9d68a0e5a30c454f9f0ca25cd10230f6/
 rule redeemingAllValidity() { 
     address owner; 
+    address feeRecipient = feeRecipient();
+    require owner != feeRecipient;
+
     uint256 shares; require shares == balanceOf(owner);
     
     env e; safeAssumptions(e);
@@ -290,18 +409,45 @@ rule redeemingAllValidity() {
     assert ownerBalanceAfter == 0;
 }
 
-// Violated: https://prover.certora.com/output/5771024/a4623f525b0c4bae9a77ea0693ecaa6c/
+// Verified https://prover.certora.com/output/5771024/fdeec6302e9b429bb0b725f3d9fd22fe
 invariant zeroAllowanceOnAssets(address user)
-    // if no allowance in assets then no allownace in shares.
+    // no alloownaces from current contract.
     Token0.allowance(currentContract, user) == 0 && currentContract.allowance(currentContract, user) == 0 {
         preserved with(env e) {
             require msgSender(e) != currentContract;
+            safeAssumptions(e);
+            require user != permit2Address(), "allownaces for permit2 behave differently.";
         }
     }
 
-////////////////////////////////////////////////////////////////////////////////
-////               # stakeholder properties  (Risk Analysis )         //////////
-////////////////////////////////////////////////////////////////////////////////
+// Verified
+rule onlyContributionMethodsReduceAssets(method f) {
+    address user; require user != currentContract;
+    uint256 userBalanceOfBefore = Token0.balanceOf(user);
+
+    env e; 
+    calldataarg args;
+    safeAssumptions(e);
+
+    f(e, args);
+
+    uint256 userBalanceOfAfter = Token0.balanceOf(user);
+
+    assert userBalanceOfBefore > userBalanceOfAfter =>
+        (f.selector == sig:deposit(uint256,address).selector ||
+         f.selector == sig:mint(uint256,address).selector ||
+         f.contract == asset() || f.contract == currentContract),
+        "a user's assets must not go down except on calls to contribution methods or calls directly to the asset.";
+}
+
+function callContributionMethods(env e, method f, uint256 assets, uint256 shares, address receiver) {
+    if (f.selector == sig:deposit(uint256,address).selector) {
+        deposit(e, assets, receiver);
+    }
+    if (f.selector == sig:mint(uint256,address).selector) {
+        mint(e, shares, receiver);
+    }
+}
 
 // Violated: https://prover.certora.com/output/5771024/a4623f525b0c4bae9a77ea0693ecaa6c/
 rule contributingProducesShares(method f)
@@ -333,26 +479,15 @@ filtered {
         "a contributor's assets must decrease if and only if the receiver's shares increase";
 }
 
-// Verified
-rule onlyContributionMethodsReduceAssets(method f) {
-    address user; require user != currentContract;
-    uint256 userBalanceOfBefore = Token0.balanceOf(user);
 
-    env e; 
-    calldataarg args;
-    safeAssumptions(e);
-
-    f(e, args);
-
-    uint256 userBalanceOfAfter = Token0.balanceOf(user);
-
-    assert userBalanceOfBefore > userBalanceOfAfter =>
-        (f.selector == sig:deposit(uint256,address).selector ||
-         f.selector == sig:mint(uint256,address).selector ||
-         f.contract == asset() || f.contract == currentContract),
-        "a user's assets must not go down except on calls to contribution methods or calls directly to the asset.";
+function callReclaimingMethods(env e, method f, uint256 assets, uint256 shares, address receiver, address owner) {
+    if (f.selector == sig:withdraw(uint256,address,address).selector) {
+        withdraw(e, assets, receiver, owner);
+    }
+    if (f.selector == sig:redeem(uint256,address,address).selector) {
+        redeem(e, shares, receiver, owner);
+    }
 }
-
 // Violated: https://prover.certora.com/output/5771024/a4623f525b0c4bae9a77ea0693ecaa6c/
 rule reclaimingProducesAssets(method f)
 filtered {
@@ -378,58 +513,4 @@ filtered {
 
     assert ownerSharesBefore > ownerSharesAfter <=> receiverAssetsBefore < receiverAssetsAfter,
         "an owner's shares must decrease if and only if the receiver's assets increase";
-}
-
-
-
-////////////////////////////////////////////////////////////////////////////////
-////                        # helpers and miscellaneous                //////////
-////////////////////////////////////////////////////////////////////////////////
-
-function safeAssumptions(env e) {
-    require currentContract != asset(); // Although this is not disallowed, we assume the contract's underlying asset is not the contract itself
-    requireInvariant totalSupplyIsSumOfBalances();
-    require msgSender(e) != currentContract;  // This is proved by rule noDynamicCalls
-    requireInvariant feeInRange();
-    requireInvariant TotalAssetsMoreThanSupplyAndFees();    
-}
-
-function callContributionMethods(env e, method f, uint256 assets, uint256 shares, address receiver) {
-    if (f.selector == sig:deposit(uint256,address).selector) {
-        deposit(e, assets, receiver);
-    }
-    if (f.selector == sig:mint(uint256,address).selector) {
-        mint(e, shares, receiver);
-    }
-}
-
-function callReclaimingMethods(env e, method f, uint256 assets, uint256 shares, address receiver, address owner) {
-    if (f.selector == sig:withdraw(uint256,address,address).selector) {
-        withdraw(e, assets, receiver, owner);
-    }
-    if (f.selector == sig:redeem(uint256,address,address).selector) {
-        redeem(e, shares, receiver, owner);
-    }
-}
-
-function callFunctionsWithReceiverAndOwner(env e, method f, uint256 assets, uint256 shares, address receiver, address owner) {
-    if (f.selector == sig:withdraw(uint256,address,address).selector) {
-        withdraw(e, assets, receiver, owner);
-    }
-    else if (f.selector == sig:redeem(uint256,address,address).selector) {
-        redeem(e, shares, receiver, owner);
-    } 
-    else if (f.selector == sig:deposit(uint256,address).selector) {
-        deposit(e, assets, receiver);
-    }
-    else if (f.selector == sig:mint(uint256,address).selector) {
-        mint(e, shares, receiver);
-    }
-    else if (f.selector == sig:transferFrom(address,address,uint256).selector) {
-        transferFrom(e, owner, receiver, shares);
-    }
-    else {
-        calldataarg args;
-        f(e, args);
-    }
 }

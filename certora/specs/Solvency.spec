@@ -84,7 +84,7 @@ rule solvencyInInternalWithdraw() {
     uint256 feeAssets = cvlMulDiv(totalInterest,fee(), wad()); //original implementation
     assert feeAssets <= totalInterest; // Verified
     assert assert_uint256(totalAssetsPost-feeAssets) >= totalSupplyPost;
-    assert require_uint256(require_uint256(totalAssetsPost-feeAssets)+virtualAmount()) >= require_uint256(totalSupplyPost+virtualAmount());
+    assert require_uint256(assert_uint256(totalAssetsPost-feeAssets)+virtualAmount()) >= require_uint256(totalSupplyPost+virtualAmount());
     assert feesPost <= feeAssets;
     assert feesPost <= totalInterest;
     assert totalAssetsPost >= totalSupplyPost + feesPost, "solvent after"; // verified if we assume feesPost <= totalInterest 
@@ -260,8 +260,6 @@ rule solvencyEnablesInternalWithdraw() {
 }
 
 // most recent run: https://prover.certora.com/output/5771024/9f10d75284d041478faddde17cc373a6/?anonymousKey=78bc17b01af11119aaba62d2c80be88ee56f442e
-// failed cases: transferFrom - probably there is allownace to msg.sender 
-//               updateWithdrawQueue - probably withdrawQueue has size 0 
 // timeouts: deposit,mint,withdraw,redeem.
 // still running as i write this.
 rule withdrawFrontRun(method f) 

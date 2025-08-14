@@ -1,4 +1,6 @@
-import "./vaults_summaries_EulerEarn.spec";
+// import "./vaults_summaries_EulerEarn.spec";
+using VaultMock0 as v0;
+using VaultMock1 as v1;
 
 methods {
 function _.approve(address,uint256) external => DISPATCHER(true);

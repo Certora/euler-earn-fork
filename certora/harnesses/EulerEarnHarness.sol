@@ -5,6 +5,8 @@ import "../../src/EulerEarn.sol";
 import "../../src/libraries/ConstantsLib.sol";
 
 contract EulerEarnHarness is EulerEarn {
+    using Math for uint256;
+
     constructor(
         address owner,
         address evc,
@@ -27,6 +29,47 @@ contract EulerEarnHarness is EulerEarn {
 
     function virtualAmount() public view returns (uint256) {
         return ConstantsLib.VIRTUAL_AMOUNT;
+    }
+
+    function accruedFeeAndAssets() external view returns (uint256, uint256, uint256) {
+        return _accruedFeeAndAssets();
+    }
+
+    function accruedFeeAndAssetsNotSummarized()
+        external
+        view
+        returns (uint256 feeShares, uint256 newTotalAssets, uint256 newLostAssets)
+    {
+        // The assets that the Earn vault has on the strategy vaults.
+        uint256 realTotalAssets;
+        for (uint256 i; i < withdrawQueue.length; ++i) {
+            IERC4626 id = withdrawQueue[i];
+            realTotalAssets += _expectedSupplyAssets(id);
+        }
+
+        uint256 lastTotalAssetsCached = lastTotalAssets;
+        if (realTotalAssets < lastTotalAssetsCached - lostAssets) {
+            // If the vault lost some assets (realTotalAssets decreased), lostAssets is increased.
+            newLostAssets = lastTotalAssetsCached - realTotalAssets;
+        } else {
+            // If it did not, lostAssets stays the same.
+            newLostAssets = lostAssets;
+        }
+
+        newTotalAssets = realTotalAssets + newLostAssets;
+        uint256 totalInterest = newTotalAssets - lastTotalAssetsCached;
+        if (totalInterest != 0 && fee != 0) {
+            // It is acknowledged that `feeAssets` may be rounded down to 0 if `totalInterest * fee < WAD`.
+            uint256 feeAssets = totalInterest.mulDiv(fee, WAD);
+            // The fee assets is subtracted from the total assets in this calculation to compensate for the fact
+            // that total assets is already increased by the total interest (including the fee assets).
+            feeShares =
+                _convertToSharesWithTotals(feeAssets, totalSupply(), newTotalAssets - feeAssets, Math.Rounding.Floor);
+        }
+    }
+
+    function expectedSupplyAssets(IERC4626 id) external view returns (uint256) {
+        return _expectedSupplyAssets(id);
     }
 
     function realTotalAssets() public view returns (uint256) {

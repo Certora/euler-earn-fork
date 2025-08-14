@@ -1,6 +1,7 @@
-//Based on generic ERC4626 specitication: https://github.com/Certora/Examples/blob/master/DEFI/ERC4626/certora/specs/ERC4626.spec
+//Based on generic ERC4626 specification: https://github.com/Certora/Examples/blob/master/DEFI/ERC4626/certora/specs/ERC4626.spec
 
-import "Range.spec";
+import "setup/dispatchingWithoutVaultSummaries.spec";
+import "summaries/Math.spec";
 using Token0 as Token0;
 using ERC20Helper as ERC20Helper;
 using EthereumVaultConnector as EVC;
@@ -10,7 +11,6 @@ methods {
 
      function SafeERC20.safeTransfer(address token,address to,uint256 value) internal with (env e) 
         => tokenTransferFromToCVL(e,token,calledContract,to,value); 
-    function EulerEarn.HOOK_after_withdrawStrategy(uint256 assets) internal => CVL_after_withdrawStrategy(assets);
     function EulerEarn.HOOK_after_accrueInterest() internal => CVL_after_accrueInterest();
 
     function EVC.getAccountOwner(address) external returns address envfree;
@@ -51,6 +51,7 @@ methods {
     function maxMint(address) external returns uint256 envfree;
     function maxWithdraw(address) external returns uint256 envfree;
     function maxRedeem(address) external returns uint256 envfree;
+    function maxFee() external returns uint256 envfree;
     function permit(address,address,uint256,uint256,uint8,bytes32,bytes32) external;
     function DOMAIN_SEPARATOR() external returns bytes32;
     function Token0.balanceOf(address) external returns uint256 envfree;
@@ -71,7 +72,7 @@ function safeAssumptions(env e) {
     require currentContract != asset(); // Although this is not disallowed, we assume the contract's underlying asset is not the contract itself
     requireInvariant totalSupplyIsSumOfBalances();
     require msgSender(e) != currentContract;  // This is proved by rule noDynamicCalls
-    requireInvariant feeInRange();
+    require require_uint256(fee()) <= maxFee();
     requireInvariant configBalanceAndTotalSupply(withdrawQGetAt(0));   
     requireInvariant noAssetsOnEuler();
     
@@ -124,208 +125,30 @@ invariant noAssetsOnEuler()
 
 /// solvency properties.
 
-// Verified https://prover.certora.com/output/5771024/455e0433202940aebcd4aa94b939561e/
-rule propertiesAfterAccrue() {
-    require totalAssets() >= totalSupply() + fees();
-    env e;
-    _accrueInterest(e);
-    assert fees() == 0; 
-    assert totalAssets() >= totalSupply() + fees();
-}
-
 function CVL_after_accrueInterest() {
     assert totalAssets() >= totalSupply() + fees();
 }
 
-// Main solvency invariant -- broken up into the different cases for different operations:
-
 invariant TotalAssetsMoreThanSupplyAndFees()
     totalAssets() >= totalSupply() + fees()
-    //filter out withdraw and redeem - those are proven in a different rule - solvency in Internal Withdraw
+    //filter out withdraw, redeem, deposit, mint - those are proven in a different rule - solvency in Internal Withdraw
     filtered {
     f -> (f.selector != sig:withdraw(uint256,address,address).selector &&
-          f.selector != sig:redeem(uint256,address,address).selector)
+          f.selector != sig:redeem(uint256,address,address).selector &&
+          f.selector != sig:deposit(uint256,address).selector &&
+          f.selector != sig:mint(uint256,address).selector)
     }
     {
+        preserved updateWithdrawQueue(uint256[] indexes) with (env e) {
+            safeAssumptions(e);
+            require withdrawQueueLength() == 1;
+            require indexes.length != 0;
+        }
         preserved with (env e) {
             safeAssumptions(e);
             require withdrawQueueLength() == 1;
         }
     }
-
-// prob can delete these if above verifies. 
-
-// // Verified https://prover.certora.com/output/5771024/3515c79d5e9a44349f06b12c61ef5221/
-// invariant TotalAssetsMoreThanSupplyAndFeesDeposit()
-//     totalAssets() >= totalSupply() + fees()
-//     filtered {
-//     f -> f.selector == sig:deposit(uint256,address).selector
-//     }
-//     {
-//         preserved with (env e) {
-//             safeAssumptions(e);
-//             require withdrawQueueLength() == 1;
-//         }
-//     }
-
-// // Verified https://prover.certora.com/output/5771024/faf5c9e75afa4bb185bae3ed323c6612/
-// invariant TotalAssetsMoreThanSupplyAndFeesMint()
-//     totalAssets() >= totalSupply() + fees()
-//     filtered {
-//     f -> f.selector == sig:mint(uint256,address).selector
-//     }
-//     {
-//         preserved with (env e) {
-//             safeAssumptions(e);
-//             require withdrawQueueLength() == 1;
-//         }
-//     }
-
-
-ghost uint256 totalSupplyGhost;
-ghost uint256 assetsInGhost;
-ghost uint256 totalAssetsAfterWithdrawStrategy;
-
-// Hook summaries that serve as lemmas for the solvencyInInternalWithdraw rule 
-// this is only useful if run with multi_assert_check = true 
-function CVL_after_withdrawStrategy(uint256 assetsIn) {
-    // There is some bug with the summaries (see ticket -- so I am using asstsInGhost instead of assetsIn input)
-
-    // not sure about these still -- need to think
-    assert totalSupply() == totalSupplyGhost,
-    "total supply does not change"; //verified 
-    assert Token0.balanceOf(currentContract) == assetsInGhost, 
-    "after withdraw stategy the assets are moved to Euler"; // verified
-    uint256 totalAssetsNow = totalAssets();
-    // assert totalAssetsNow + Token0.balanceOf(currentContract) >= totalSupply(), 
-    // "The sum of assets moved to Euler + totalAssets in vaults >= totalSupply"; //verified
-    totalAssetsAfterWithdrawStrategy = totalAssetsNow;
-}
-
-// verified https://prover.certora.com/output/5771024/d1f58762c7934808b936bd1a41fb15d9/ (most revent proof with less approximations)
-rule solvencyInInternalWithdraw() {
-    // simulating the internal _withdraw in a call from the external withdraw
-    env e;
-    address caller;
-    address receiver;
-    address owner;
-    uint256 assets;
-    uint256 shares;
-    safeAssumptions(e); 
-
-    require withdrawQueueLength() == 1; 
-    address withdrawQueueFirstVault = withdrawQGetAt(0);
-    
-    require caller != withdrawQueueFirstVault;
-    require receiver != withdrawQueueFirstVault;
-    require owner != withdrawQueueFirstVault;
-    require receiver != currentContract; 
-    require caller != currentContract;
-    require owner != currentContract;
-    require currentContract != withdrawQueueFirstVault;
-
-    uint256 totalAssetsPre; 
-    uint256 feesPre;
-    uint256 lostAssetsPre;
-    uint256 totalSupplyPre = totalSupply();
-    (feesPre,totalAssetsPre,lostAssetsPre) =  _accruedFeeAndAssets(e); // 6 non-linear ops 
-    require totalSupplyGhost == totalSupplyPre;
-    require assetsInGhost == assets;
-
-    uint256 lastTotalAssetsPre = lastTotalAssets();
-    require totalAssetsPre >= totalSupplyPre + feesPre, "solvent before";
-    require lastTotalAssetsPre == totalAssetsPre, "_withdraw is called after _accrueInterest";
-    assert feesPre == 0; // verified
-
-    bool assetSharesRelationInWithdraw = ( shares == _convertToSharesWithTotals(e,assets, totalSupplyPre, lastTotalAssetsPre, Math.Rounding.Ceil) ); // 2 non-linear ops
-    bool assetSharesRelationInRedeem = ( assets == _convertToAssetsWithTotals(e,shares, totalSupplyPre, lastTotalAssetsPre, Math.Rounding.Floor)); // 2 non-linear ops
-    require assetSharesRelationInWithdraw || assetSharesRelationInRedeem,
-        "internal withdraw is called either in the external withdraw or the external redeem";
-
-    assert shares <= assets; // verified
-
-    _withdraw(e,caller,receiver,owner,assets,shares); // 22 non-linear ops -> cvlDispatchMaxWithdraw - 4, cvlDispatchPreviewRedeem - 4, CVL_after_withdrawStrategy - 6 
-
-    uint256 totalAssetsPost; 
-    uint256 feesPost;
-    uint256 lostAssetsPost;
-    uint256 totalSupplyPost = totalSupply();
-    (feesPost,totalAssetsPost,lostAssetsPost) =  _accruedFeeAndAssets(e); // 6 non-linear ops 
-    uint256 lastTotalAssetsPost = lastTotalAssets(); 
-    
-    assert totalAssetsPost == totalAssetsAfterWithdrawStrategy; // verified
-    assert totalSupplyPost == assert_uint256(totalSupplyPre - shares); // verified
-    assert Token0.balanceOf(currentContract) == 0; // verified
-    assert lastTotalAssetsPost == assert_uint256(lastTotalAssetsPre - assets); // verified
-    uint256 totalInterest = assert_uint256(totalAssetsPost-lastTotalAssetsPost); // verified
-    // uint256 feeAssets = feeAssetsFromTotalInterest[totalInterest]; //using ghost as is used in the summary, guaranteed to satisfy feeAssets<=totalInterest, originally this is totalInterest.mulDiv(fee, WAD);
-    uint256 feeAssets = cvlMulDiv(totalInterest,fee(), wad()); //original implementation
-    assert feeAssets <= totalInterest; // Verified
-    assert assert_uint256(totalAssetsPost-feeAssets) >= totalSupplyPost;
-    assert require_uint256(assert_uint256(totalAssetsPost-feeAssets)+virtualAmount()) >= require_uint256(totalSupplyPost+virtualAmount());
-    assert feesPost <= feeAssets;
-    assert feesPost <= totalInterest;
-    assert totalAssetsPost >= totalSupplyPost + feesPost, "solvent after"; // verified if we assume feesPost <= totalInterest 
-}
-
-// Verified 
-rule conversionOfZero {
-    uint256 convertZeroShares = convertToAssets(0);
-    uint256 convertZeroAssets = convertToShares(0);
-
-    assert convertZeroShares == 0,
-        "converting zero shares must return zero assets";
-    assert convertZeroAssets == 0,
-        "converting zero assets must return zero shares";
-}
-
-// Verified with caching summary (see above) or with CONSTANT summary
-rule convertToAssetsWeakAdditivity() {
-    uint256 sharesA; uint256 sharesB;
-    uint256 assetsA = convertToAssets(sharesA);
-    uint256 assetsB = convertToAssets(sharesB);
-    uint256 sharesAplusB = require_uint256(sharesA + sharesB);
-    uint256 assetsAplusB = convertToAssets(sharesAplusB);
-    require sharesA + sharesB < max_uint128
-         && assetsA + assetsB < max_uint256
-         && assetsAplusB < max_uint256;
-    assert assetsA + assetsB <= assetsAplusB,
-        "converting sharesA and sharesB to assets then summing them must yield a smaller or equal result to summing them then converting";
-}
-
-// Verified with caching summary
-rule convertToSharesWeakAdditivity() {
-    uint256 assetsA; uint256 assetsB;
-    uint256 sharesA = convertToShares(assetsA);
-    uint256 sharesB = convertToShares(assetsB);
-    uint256 assetsAplusB = require_uint256(assetsA+assetsB);
-    uint256 sharesAplusB = convertToShares(assetsAplusB);
-    require assetsA + assetsB < max_uint128
-         && sharesA + sharesB < max_uint256
-         && sharesAplusB < max_uint256;
-    assert sharesA + sharesB <= sharesAplusB,
-        "converting assetsA and assetsB to shares then summing them must yield a smaller or equal result to summing them then converting";
-}
-
-// Verified
-rule conversionWeakMonotonicity {
-    uint256 smallerShares; uint256 largerShares;
-    uint256 smallerAssets; uint256 largerAssets;
-
-    assert smallerShares < largerShares => convertToAssets(smallerShares) <= convertToAssets(largerShares),
-        "converting more shares must yield equal or greater assets";
-    assert smallerAssets < largerAssets => convertToShares(smallerAssets) <= convertToShares(largerAssets),
-        "converting more assets must yield equal or greater shares";
-}
-
-// Verified
-rule conversionWeakIntegrity() {
-    uint256 sharesOrAssets;
-    assert convertToShares(convertToAssets(sharesOrAssets)) <= sharesOrAssets,
-        "converting shares to assets then back to shares must return shares less than or equal to the original amount";
-    assert convertToAssets(convertToShares(sharesOrAssets)) <= sharesOrAssets,
-        "converting assets to shares then back to assets must return assets less than or equal to the original amount";
-}
 
 // Verified
 rule underlyingCannotChange() 
@@ -406,4 +229,3 @@ rule onlyContributionMethodsReduceAssets(method f) {
          f.contract == asset() || f.contract == currentContract),
         "a user's assets must not go down except on calls to contribution methods or calls directly to the asset.";
 }
-

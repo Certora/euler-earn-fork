@@ -44,7 +44,7 @@ contract EulerEarnHarness is EulerEarn {
         uint256 realTotalAssets;
         for (uint256 i; i < withdrawQueue.length; ++i) {
             IERC4626 id = withdrawQueue[i];
-            realTotalAssets += _expectedSupplyAssets(id);
+            realTotalAssets += expectedSupplyAssets(id);
         }
 
         uint256 lastTotalAssetsCached = lastTotalAssets;
@@ -68,15 +68,11 @@ contract EulerEarnHarness is EulerEarn {
         }
     }
 
-    function expectedSupplyAssets(IERC4626 id) external view returns (uint256) {
-        return _expectedSupplyAssets(id);
-    }
-
     function realTotalAssets() public view returns (uint256) {
         uint256 realTotalAssets;
         for (uint256 i; i < withdrawQueue.length; ++i) {
             IERC4626 id = withdrawQueue[i];
-            realTotalAssets += _expectedSupplyAssets(id);
+            realTotalAssets += expectedSupplyAssets(id);
         }
         return realTotalAssets;
     }

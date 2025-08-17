@@ -11,7 +11,7 @@ methods {
 
      function SafeERC20.safeTransfer(address token,address to,uint256 value) internal with (env e) 
         => tokenTransferFromToCVL(e,token,calledContract,to,value); 
-    function EulerEarn.HOOK_after_accrueInterest() internal => CVL_after_accrueInterest();
+    // function EulerEarn.HOOK_after_accrueInterest() internal => CVL_after_accrueInterest();
 
     function EVC.getAccountOwner(address) external returns address envfree;
     function config_(address) external returns EulerEarnHarness.MarketConfig envfree; 

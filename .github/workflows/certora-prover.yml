@@ -11,6 +11,7 @@ on:
   pull_request:
     branches:
       - master
+      - certora/specs
   workflow_dispatch:
 
 jobs:
@@ -33,7 +34,7 @@ jobs:
 
       # Submit verification jobs to Certora Prover
       - name: Submit verification jobs to Certora Prover
-        uses: Certora/certora-run-action@v2
+        uses: Certora/certora-run-action@v2.1.0
         with:
           # Add your configurations as lines, each line is separated.
           # Specify additional options for each configuration by adding them after the configuration.
@@ -62,4 +63,3 @@ jobs:
           certora-key: ${{ secrets.CERTORAKEY }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-

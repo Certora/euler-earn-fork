@@ -77,6 +77,9 @@ function cvlDispatchAsset(address called, env e) returns address {
     if(called == currentContract) {
         return Token0;
     }
+    if(called == 0) {
+        return 0;
+    }
     require false, "We assume external calls to ERC4626 methods are always on one of the vaults";
     return 0;
 }

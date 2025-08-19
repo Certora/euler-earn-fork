@@ -117,13 +117,11 @@ invariant noCapThenNoApproval(address market)
         // not sure all of these assumptions are necessary but all are legitimate.
         require market != permit2Address();
         require msgSender(e) != currentContract; 
-        requireInvariant pendingCapIsUint136(id);
         requireInvariant enabledHasPositiveRank(id);
         requireInvariant supplyCapIsEnabled(id);
         requireInvariant withdrawRankCorrect(id);
         requireInvariant noBadPendingCap(id);
         requireInvariant noCapThenNoApproval(id);
-        requireInvariant pendingCapIsUint136(market);
         requireInvariant enabledHasPositiveRank(market);
         requireInvariant supplyCapIsEnabled(market);
         requireInvariant withdrawRankCorrect(market);
@@ -132,7 +130,6 @@ invariant noCapThenNoApproval(address market)
     }
     preserved with (env e) {
         require msgSender(e) != currentContract; 
-        requireInvariant pendingCapIsUint136(market);
         requireInvariant noBadPendingCap(market);
         requireInvariant supplyCapIsEnabled(market);
     }
@@ -145,7 +142,6 @@ invariant notInWithdrawQThenNoApproval(address market)
     preserved with (env e) {
         require market != permit2Address();
         require msgSender(e) != currentContract; 
-        requireInvariant pendingCapIsUint136(market);
         requireInvariant enabledHasPositiveRank(market);
         requireInvariant supplyCapIsEnabled(market);
         requireInvariant withdrawRankCorrect(market);

@@ -40,6 +40,7 @@ jobs:
           configurations: |-
             certora/confs/Balances.conf
             certora/confs/ConsistentState.conf
+            certora/confs/ConsistentStateNotInQueue.conf
             certora/confs/Enabled.conf
             certora/confs/Immutability.conf
             certora/confs/Liveness.conf
@@ -54,6 +55,7 @@ jobs:
             certora/confs/Conversions.conf
             certora/confs/ERC4626.conf
             certora/confs/Solvency.conf
+            certora/confs/SolvencyInternal.conf
           solc-versions: 0.8.17 0.8.26
           cli-release: beta
           job-name: "Verified Rules"

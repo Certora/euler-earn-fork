@@ -35,9 +35,7 @@ rule canPauseSupply() {
 rule canForceRemoveMarket(address market) {
     requireInvariant supplyCapIsEnabled(market);
     requireInvariant enabledHasConsistentAsset(market);
-    // Safe require because this holds as an invariant.
-    // require hasPositiveSupplyCapIsUpdated(market);
-
+    
     EulerEarnHarness.MarketConfig config = config_(market);
     require config.cap > 0;
     require config.removableAt == 0;
@@ -45,8 +43,8 @@ rule canForceRemoveMarket(address market) {
     require withdrawQueue(1) == market;
     require withdrawQueueLength() == 2;
 
-    require !reentrancyGuardEntered(), "call is not during reentrancy";
-
+    bool reentrancyGuardEntered = reentrancyGuardEntered();
+    require !reentrancyGuardEntered, "call is not during reentrancy";
     env e1; env e2; env e3;
     require hasCuratorRole(e1.msg.sender);
     require e2.msg.sender == e1.msg.sender;

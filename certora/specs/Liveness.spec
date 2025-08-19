@@ -68,6 +68,7 @@ rule canForceRemoveMarket(address market) {
     assert !lastReverted;
 
     env e4; uint256[] newWithdrawQueue;
+    require e4.msg.sender != evc;
     require newWithdrawQueue.length == 1;
     require newWithdrawQueue[0] == 0;
     require e4.msg.value == 0;

@@ -137,6 +137,7 @@ rule submitCapRevertCondition(env e, address market, uint256 newSupplyCap) {
     EulerEarnHarness.MarketConfig config = config_(market);
     bool strategyAllowed = isStrategyAllowedHarness(market);
     bool reentrancyEntered = reentrancyGuardEntered();
+    require market != currentContract, "Euler itself shouldn't be a market in Euler"; 
 
     requireInvariant timelockInRange();
     // Safe require as it corresponds to some time very far into the future.

@@ -1,5 +1,7 @@
 import "./vaults_summaries_EulerEarn.spec";
 
+using Token0 as Token0;
+
 methods {
 function _.approve(address,uint256) external => DISPATCHER(true);
 function _.approve(address,address,uint160,uint48) external => DISPATCHER(true);
@@ -71,6 +73,9 @@ function cvlDispatchAsset(address called, env e) returns address {
     }
     if(called == v1) {
         return v1.asset(e);
+    }
+    if(called == currentContract) {
+        return Token0;
     }
     require false, "We assume external calls to ERC4626 methods are always on one of the vaults";
     return 0;

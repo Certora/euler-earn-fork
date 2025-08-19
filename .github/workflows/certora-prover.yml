@@ -49,6 +49,7 @@ jobs:
             certora/confs/Reverts.conf
             certora/confs/Roles.conf
             certora/confs/Timelock.conf
+            certora/confs/TimelockRemovableTime.conf
             certora/confs/LostAssets.conf
             certora/confs/Conversions.conf
             certora/confs/ERC4626.conf

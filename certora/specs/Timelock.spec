@@ -160,7 +160,11 @@ rule nextRemovableTimeDoesNotRevert(address id) {
 
 // Verified
 // Show that nextRemovableTime is increasing with time and that no removal can happen before it.
-rule removableTime(env e_next, method f, calldataarg args) {
+rule removableTime(env e_next, method f, calldataarg args) 
+filtered {
+    f -> !f.isView
+}
+{
     // The environment e yields the current time.
     env e;
     // Safe require as it corresponds to some time very far into the future.

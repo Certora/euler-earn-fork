@@ -32,35 +32,24 @@ function hasGuardianRole(address user) returns bool {
 invariant noFeeToUnsetFeeRecipient()
     feeRecipient() == 0 => fee() == 0;
 
-function hasSupplyCapIsEnabled(address market) returns bool {
-    EulerEarnHarness.MarketConfig config = config_(market);
-
-    return config.cap > 0 => config.enabled;
-}
 
 // Check that having a positive supply cap implies that the market is enabled.
 // This invariant is useful to conclude that markets that are not enabled cannot be interacted with (notably for reallocate).
 // Verified
 invariant supplyCapIsEnabled(address market)
-    hasSupplyCapIsEnabled(market);
+    config_(market).cap > 0 => config_(market).enabled;
 
-function hasPendingSupplyCapHasConsistentAsset(address market) returns bool {
-    return pendingCap_(market).validAt > 0 => getVaultAsset(market) == asset();
-}
 
 // Check that there can only be pending caps on markets where the loan asset is the asset of the vault
 // Verified
 invariant pendingSupplyCapHasConsistentAsset(address market)
-    hasPendingSupplyCapHasConsistentAsset(market);
+    pendingCap_(market).validAt > 0 => getVaultAsset(market) == asset();
 
-function isEnabledHasConsistentAsset(address market) returns bool {
-    return config_(market).enabled => getVaultAsset(market) == asset();
-}
 
 // Check that having a positive cap implies that the loan asset is the asset of the vault.
 // Verified
 invariant enabledHasConsistentAsset(address market)
-    isEnabledHasConsistentAsset(market)
+    config_(market).enabled => getVaultAsset(market) == asset()
 { preserved acceptCap(address _market) with (env e) {
     requireInvariant pendingSupplyCapHasConsistentAsset(market);
     require e.block.timestamp > 0;
@@ -129,6 +118,7 @@ invariant noCapThenNoApproval(address market)
         requireInvariant noCapThenNoApproval(market);
     }
     preserved with (env e) {
+        require market != currentContract;
         require msgSender(e) != currentContract; 
         requireInvariant noBadPendingCap(market);
         requireInvariant supplyCapIsEnabled(market);

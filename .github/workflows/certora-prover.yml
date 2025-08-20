@@ -34,7 +34,7 @@ jobs:
 
       # Submit verification jobs to Certora Prover
       - name: Submit verification jobs to Certora Prover
-        uses: Certora/certora-run-action@v2.1.0
+        uses: Certora/certora-run-action@v2
         with:
           # Add your configurations as lines, each line is separated.
           # Specify additional options for each configuration by adding them after the configuration.

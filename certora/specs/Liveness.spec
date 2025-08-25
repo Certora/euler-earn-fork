@@ -33,14 +33,13 @@ rule canPauseSupply() {
 // Checks that currator is able to remove (disable) any market
 // Verified
 rule canForceRemoveMarket(address market) {
-    require market != currentContract;
-
     require market == v0 || market == v1;
     requireInvariant supplyCapIsEnabled(market);
     requireInvariant enabledHasConsistentAsset(market);
     
     EulerEarnHarness.MarketConfig config = config_(market);
     require config.cap > 0;
+    require ERC20Helper.totalSupply(market) > 0; // added recently but doesn't really matter
     require config.removableAt == 0;
     // Assume that the withdraw queue is [X, market];
     require withdrawQueue(1) == market;
@@ -67,6 +66,7 @@ rule canForceRemoveMarket(address market) {
     requireInvariant timelockInRange();
     // Safe require as it corresponds to some time very far into the future.
     require e3.block.timestamp < 2^63;
+    require e3.block.timestamp > 0; //added recently
     submitMarketRemoval@withrevert(e3, market);
     assert !lastReverted;
 

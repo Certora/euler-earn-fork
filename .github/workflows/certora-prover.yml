@@ -62,5 +62,6 @@ jobs:
           solc-versions: 0.8.17 0.8.26
           job-name: "Verified Rules"
           certora-key: ${{ secrets.CERTORAKEY }}
+          server: "vaas-dev"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -11,7 +11,7 @@ function _.allowance(address,address) external => DISPATCHER(true);
 function _.transfer(address,uint256) external => DISPATCHER(true);
 function _.balanceOf(address) external => DISPATCHER(true);
 function _.isStrategyAllowed(address) external => DISPATCHER(true);
-function _.permit2Address() external => DISPATCHER(true);
+function _.permit2Address() external => DISPATCHER(optimistic=true, use_fallback=true); //CHANGED HERE DUE TO SANITY ISSUE
 function _.getCurrentOnBehalfOfAccount(address) external => DISPATCHER(true);
 function previewRedeem(uint256) external returns uint256 envfree;
 

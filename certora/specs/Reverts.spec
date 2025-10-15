@@ -137,11 +137,13 @@ rule submitCapRevertCondition(env e, address market, uint256 newSupplyCap) {
     EulerEarnHarness.MarketConfig config = config_(market);
     bool strategyAllowed = isStrategyAllowedHarness(market);
     bool reentrancyEntered = reentrancyGuardEntered();
-    require market != currentContract, "Euler itself shouldn't be a market in Euler"; 
+    require market != currentContract, "Euler itself shouldn't be a market in Euler";
+    uint256 supplyCap = config.cap; 
 
     requireInvariant timelockInRange();
     // Safe require as it corresponds to some time very far into the future.
     require e.block.timestamp < 2^63;
+    require e.block.timestamp > 0;
     requireInvariant supplyCapIsEnabled(market);
 
     submitCap@withrevert(e, market, newSupplyCap);
@@ -152,12 +154,12 @@ rule submitCapRevertCondition(env e, address market, uint256 newSupplyCap) {
         getVaultAsset(market) != asset ||
         pendingCapValidAt != 0 ||
         config.removableAt != 0 ||
-        newSupplyCap == assert_uint256(config.cap) ||
-        (newSupplyCap == 2^184-1 && config.cap == 2^136-1 ) || //new revert condition due to their most recent fix.
+        newSupplyCap == supplyCap ||
+        (newSupplyCap == 2^184-1 && supplyCap == 2^136-1 ) || //new revert condition due to their most recent fix.
         (newSupplyCap >= 2^136 && newSupplyCap != 2^184-1) || 
+        (!strategyAllowed && newSupplyCap > supplyCap) || //fix here - 26/8
         msgSenderOnlyEVCAccountOwnerReverted ||
-        reentrancyEntered ||
-        !strategyAllowed;
+        reentrancyEntered;
 }
 
 

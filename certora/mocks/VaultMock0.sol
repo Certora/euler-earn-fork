@@ -35,5 +35,7 @@ contract VaultMock0 is ERC4626 {
    function convertToShares(uint256 assets, Math.Rounding rounding) external view returns (uint256) {
         return _convertToAssets(assets, rounding);
    }
-
+   
+   // added to address sanity issue
+   receive() external payable {}
 }

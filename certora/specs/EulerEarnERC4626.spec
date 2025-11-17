@@ -103,6 +103,11 @@ hook Sload uint256 val _balances[KEY address addy]  {
 invariant totalSupplyIsSumOfBalances()
     totalSupply() == sumOfBalances;
 
+function constructor_token_assumptions(address user) {
+    require Token0.balanceOf(currentContract)==0, "at initialization the contract address doesn't have a balance in Token0";
+    require Token0.allowance(currentContract,user)==0, "at initialization the contract address hasn't given an allowance in Token0";
+    require Token0.allowance(user,currentContract)==0, "at initialization the contract address hasn't received an allowance in Token0";
+}
 
 // Verified
 invariant noAssetsOnEuler()
@@ -117,6 +122,9 @@ invariant noAssetsOnEuler()
             require receiver != currentContract;
             require owner != currentContract;
             safeAssumptions(e);
+        }
+        preserved constructor() with (env e) {
+            constructor_token_assumptions(currentContract);
         }
         preserved with (env e) {
             safeAssumptions(e);
@@ -201,8 +209,11 @@ rule redeemingAllValidity() {
 
 // Verified https://prover.certora.com/output/5771024/fdeec6302e9b429bb0b725f3d9fd22fe
 invariant zeroAllowanceOnAssets(address user)
-    // no alloownaces from current contract.
+    // no allowances from current contract.
     Token0.allowance(currentContract, user) == 0 && currentContract.allowance(currentContract, user) == 0 {
+        preserved constructor() with (env e) {
+            constructor_token_assumptions(user);
+        }
         preserved with(env e) {
             require msgSender(e) != currentContract;
             safeAssumptions(e);
